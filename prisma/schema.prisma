@@ -1,0 +1,278 @@
+// Real estate rental marketplace — schema
+// Three user roles (landlord, tenant, property manager), rental listings with
+// full lease/utility/lawn-care/late-fee terms, AI tenant-screening chat, and
+// a showing-booking calendar gated by screening results.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
+enum Role {
+  LANDLORD
+  TENANT
+  PROPERTY_MANAGER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         Role
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedProperties   Property[]         @relation("PropertyOwner")
+  managedProperties Property[]         @relation("PropertyManager")
+  createdSlots      AvailabilitySlot[] @relation("SlotCreatedBy")
+  screeningSessions ScreeningSession[] @relation("TenantScreenings")
+  appointments      Appointment[]      @relation("TenantAppointments")
+
+  @@index([role])
+}
+
+// ---------------------------------------------------------------------------
+// Property listings
+// ---------------------------------------------------------------------------
+
+enum PropertyStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PaidBy {
+  LANDLORD
+  TENANT
+  SPLIT
+}
+
+enum UtilityType {
+  ELECTRIC
+  GAS
+  WATER
+  SEWER
+  TRASH
+  INTERNET
+  CABLE
+  OTHER
+}
+
+enum LawnCareParty {
+  LANDLORD
+  TENANT
+  PROPERTY_MANAGER
+  HIRED_SERVICE
+}
+
+enum LateFeeType {
+  FLAT
+  PERCENTAGE
+}
+
+model Property {
+  id     String         @id @default(cuid())
+  status PropertyStatus @default(DRAFT)
+
+  owner   User   @relation("PropertyOwner", fields: [ownerId], references: [id])
+  ownerId String
+
+  manager   User?   @relation("PropertyManager", fields: [managerId], references: [id])
+  managerId String?
+
+  title       String
+  description String
+
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  zip          String
+
+  bedrooms   Int
+  bathrooms  Float
+  squareFeet Int?
+
+  // Rent & lease terms
+  rentAmount        Decimal @db.Decimal(10, 2)
+  securityDeposit   Decimal @db.Decimal(10, 2)
+  leaseLengthMonths Int
+  leaseTermNotes    String?
+  rentDueDay        Int     @default(1) // day of month rent is due, 1-31
+
+  // HUD / voucher acceptance
+  acceptsHud Boolean @default(false)
+
+  // Tenant screening criteria
+  minCreditScore           Int?
+  minMonthlyIncomeMultiple Float? // e.g. 3.0 = tenant must earn 3x rent/month
+  requiresBackgroundCheck  Boolean @default(true)
+  allowsEvictionHistory    Boolean @default(false)
+  criteriaNotes            String?
+
+  // Lawn care
+  lawnCareResponsibleParty LawnCareParty @default(LANDLORD)
+  lawnCarePaidBy           PaidBy        @default(LANDLORD)
+
+  // Late fees
+  lateFeeAmount    Decimal?    @db.Decimal(10, 2)
+  lateFeeType      LateFeeType @default(FLAT)
+  lateFeeGraceDays Int         @default(0)
+
+  // Work-for-rent options
+  workForRentAvailable   Boolean @default(false)
+  workForRentDescription String?
+
+  imageUrls String[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  utilities         PropertyUtility[]
+  availabilitySlots AvailabilitySlot[]
+  screeningSessions ScreeningSession[]
+  appointments      Appointment[]
+
+  @@index([status])
+  @@index([city, state])
+  @@index([ownerId])
+  @@index([managerId])
+}
+
+model PropertyUtility {
+  id         String      @id @default(cuid())
+  property   Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+  type       UtilityType
+  paidBy     PaidBy
+
+  @@unique([propertyId, type])
+}
+
+// ---------------------------------------------------------------------------
+// Showing availability & appointments
+// ---------------------------------------------------------------------------
+
+model AvailabilitySlot {
+  id         String   @id @default(cuid())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+
+  createdBy   User   @relation("SlotCreatedBy", fields: [createdById], references: [id])
+  createdById String
+
+  startTime DateTime
+  endTime   DateTime
+  isBooked  Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  appointment Appointment?
+
+  @@index([propertyId, startTime])
+}
+
+enum AppointmentStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model Appointment {
+  id         String   @id @default(cuid())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+
+  tenant   User   @relation("TenantAppointments", fields: [tenantId], references: [id])
+  tenantId String
+
+  slot   AvailabilitySlot @relation(fields: [slotId], references: [id])
+  slotId String           @unique
+
+  screeningSession   ScreeningSession @relation(fields: [screeningSessionId], references: [id])
+  screeningSessionId String           @unique
+
+  status    AppointmentStatus @default(CONFIRMED)
+  createdAt DateTime          @default(now())
+
+  @@index([propertyId])
+  @@index([tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// AI tenant-screening chat
+// ---------------------------------------------------------------------------
+
+enum ScreeningStatus {
+  IN_PROGRESS
+  PASSED
+  FAILED
+}
+
+model ScreeningSession {
+  id         String   @id @default(cuid())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+
+  tenant   User   @relation("TenantScreenings", fields: [tenantId], references: [id])
+  tenantId String
+
+  status      ScreeningStatus @default(IN_PROGRESS)
+  // Deterministic gate result: which criteria passed/failed and why.
+  // Populated by the rules engine, not the LLM.
+  score       Int?
+  failReasons String[]        @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages    ChatMessage[]
+  answers     ScreeningAnswer[]
+  appointment Appointment?
+
+  @@index([propertyId, tenantId])
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model ChatMessage {
+  id                 String           @id @default(cuid())
+  session            ScreeningSession @relation(fields: [screeningSessionId], references: [id], onDelete: Cascade)
+  screeningSessionId String
+
+  role    ChatRole
+  content String
+
+  createdAt DateTime @default(now())
+
+  @@index([screeningSessionId, createdAt])
+}
+
+// Structured answers extracted from the conversation by the LLM tool call,
+// used as input to the deterministic scoring engine.
+model ScreeningAnswer {
+  id                 String           @id @default(cuid())
+  session            ScreeningSession @relation(fields: [screeningSessionId], references: [id], onDelete: Cascade)
+  screeningSessionId String
+
+  key   String // e.g. "monthlyIncome", "creditScore", "hasHudVoucher", "evictionHistory", "desiredMoveInDate"
+  value String
+
+  createdAt DateTime @default(now())
+
+  @@unique([screeningSessionId, key])
+}
