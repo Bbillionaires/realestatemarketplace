@@ -1,0 +1,740 @@
+// ---------------------------------------------------------------------------
+// Prisma schema for the Landlord/Tenant Relay Messaging Platform.
+//
+// Phase 1 (Foundation) fully wires up: User, UserProfile, PhoneNumber,
+// PhoneVerification, Property, PropertyUnit, PropertyManagerAssignment,
+// AuditLog, RefreshToken.
+//
+// The remaining models (Conversation, Message, moderation, scheduling,
+// applications, leases, notifications, ...) are defined now so later phases
+// never require a destructive schema rewrite, but their service/controller
+// layers are implemented in the phases that use them.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  PROSPECTIVE_TENANT
+  CURRENT_TENANT
+  LANDLORD
+  PROPERTY_MANAGER
+  STAFF_MODERATOR
+  ADMINISTRATOR
+  SUPER_ADMINISTRATOR
+}
+
+enum ConversationStatus {
+  NEW_INQUIRY
+  ACTIVE
+  SHOWING_REQUESTED
+  SHOWING_SCHEDULED
+  APPLICATION_STARTED
+  APPLICATION_SUBMITTED
+  APPLICATION_APPROVED
+  APPLICATION_DENIED
+  LEASE_PENDING
+  LEASE_SIGNED
+  CURRENT_TENANT
+  CLOSED
+  BLOCKED
+  UNDER_REVIEW
+}
+
+enum ConversationParticipantRole {
+  TENANT
+  LANDLORD
+  PROPERTY_MANAGER
+  STAFF
+}
+
+enum ApplicationStatus {
+  NOT_STARTED
+  STARTED
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  DENIED
+  WITHDRAWN
+}
+
+enum LeaseStatus {
+  NONE
+  PENDING
+  SIGNED
+  ACTIVE
+  RENEWAL_PENDING
+  RENEWED
+  TERMINATED
+  EXPIRED
+}
+
+enum ModerationStatus {
+  NONE
+  FLAGGED
+  UNDER_REVIEW
+  CLEARED
+  BLOCKED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageChannel {
+  SMS
+  IN_APP
+}
+
+enum ModerationDecision {
+  PENDING
+  APPROVED
+  BLOCKED
+  AUTO_APPROVED
+}
+
+enum MessageStatus {
+  DRAFT
+  RECEIVED
+  PENDING_MODERATION
+  BLOCKED
+  APPROVED
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+  UNDELIVERABLE
+  READ_IN_APP
+  DELETED_BY_ADMIN
+}
+
+enum DeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+  UNDELIVERABLE
+}
+
+enum ViolationType {
+  PHONE_NUMBER
+  EMAIL
+  URL
+  SOCIAL_MEDIA
+  PAYMENT_HANDLE
+  QR_CODE
+  OFF_PLATFORM_REQUEST
+  OTHER
+}
+
+enum DetectionMethod {
+  REGEX
+  NORMALIZATION
+  KEYWORD
+  PATTERN
+  HISTORY_ANALYSIS
+  AI_FALLBACK
+  IMAGE_ANALYSIS
+}
+
+enum ViolationAction {
+  EDUCATIONAL_WARNING
+  STRONG_WARNING
+  TEMP_RESTRICTION
+  MODERATOR_REVIEW
+  SUSPENSION
+  ADMIN_OVERRIDE
+}
+
+enum RestrictionType {
+  MESSAGING_RESTRICTED
+  SUSPENDED
+  BLOCKED
+}
+
+enum ShowingStatus {
+  REQUESTED
+  SLOT_PROPOSED
+  SCHEDULED
+  RESCHEDULE_PROPOSED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum ConsentType {
+  TRANSACTIONAL
+  MARKETING
+}
+
+enum ConsentStatus {
+  OPTED_IN
+  OPTED_OUT
+  PENDING
+}
+
+enum AttachmentScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  CONTAINS_CONTACT_INFO
+  REJECTED
+}
+
+enum CurrentTenantCategory {
+  MAINTENANCE
+  RENT_QUESTION
+  LEASE_QUESTION
+  EMERGENCY
+  INSPECTION
+  RENEWAL
+  NOTICE
+  COMPLAINT
+  GENERAL
+}
+
+// ---------------------------------------------------------------------------
+// Identity / Auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String
+  role              Role
+  isActive          Boolean   @default(true)
+  twoFactorEnabled  Boolean   @default(false)
+  twoFactorSecret   String?
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  profile               UserProfile?
+  phoneNumbers          PhoneNumber[]
+  refreshTokens         RefreshToken[]
+  ownedProperties       Property[]                   @relation("PropertyOwner")
+  managerAssignments    PropertyManagerAssignment[]
+  conversationsAsTenant   Conversation[]              @relation("ConversationTenant")
+  conversationsAsLandlord Conversation[]              @relation("ConversationLandlord")
+  conversationParticipants ConversationParticipant[]
+  sentMessages          Message[]                    @relation("MessageSender")
+  receivedMessages      Message[]                     @relation("MessageRecipient")
+  violations            Violation[]
+  restrictions          UserRestriction[]             @relation("RestrictionUser")
+  restrictionsImposed   UserRestriction[]              @relation("RestrictionImposedBy")
+  notificationPreference NotificationPreference?
+  consentEvents         ConsentEvent[]
+  auditLogs             AuditLog[]
+  adminNotes            AdminNote[]                   @relation("AdminNoteAuthor")
+  moderationFlagsReviewed ModerationFlag[]             @relation("ModerationFlagReviewer")
+
+  @@index([role])
+}
+
+model RefreshToken {
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash        String    @unique
+  familyId         String
+  revokedAt        DateTime?
+  replacedByTokenId String?
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  ipAddress        String?
+  userAgent        String?
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model UserProfile {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName  String
+  avatarUrl    String?
+  bio          String?
+  timezone     String   @default("America/New_York")
+  locale       String   @default("en")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Real phone numbers are NEVER stored in plaintext. `encryptedNumber` holds an
+// AES-256-GCM ciphertext (iv + tag + ciphertext, base64). `numberHash` is an
+// HMAC-SHA256 keyed hash used strictly for lookups/dedup/routing so the raw
+// number is never needed outside the encryption service.
+model PhoneNumber {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encryptedNumber String
+  numberHash      String    @unique
+  last4           String
+  countryCode     String    @default("US")
+  isVerified      Boolean   @default(false)
+  isPrimary       Boolean   @default(false)
+  verifiedAt      DateTime?
+  supersededAt    DateTime?
+  createdAt       DateTime  @default(now())
+
+  verifications PhoneVerification[]
+
+  @@index([userId])
+  @@index([numberHash])
+}
+
+model PhoneVerification {
+  id            String    @id @default(uuid())
+  phoneNumberId String
+  phoneNumber   PhoneNumber @relation(fields: [phoneNumberId], references: [id], onDelete: Cascade)
+  codeHash      String
+  attempts      Int       @default(0)
+  expiresAt     DateTime
+  verifiedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([phoneNumberId])
+}
+
+// ---------------------------------------------------------------------------
+// Properties
+// ---------------------------------------------------------------------------
+
+model Property {
+  id               String   @id @default(uuid())
+  ownerId          String
+  owner            User     @relation("PropertyOwner", fields: [ownerId], references: [id])
+  title            String
+  addressLine1     String
+  addressLine2     String?
+  city             String
+  state            String
+  zip              String
+  country          String   @default("US")
+  latitude         Float?
+  longitude        Float?
+  description      String?
+  monthlyRentCents Int?
+  depositCents     Int?
+  petPolicy        String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  units               PropertyUnit[]
+  managerAssignments  PropertyManagerAssignment[]
+  conversations       Conversation[]
+
+  @@index([ownerId])
+  @@index([city, state])
+}
+
+model PropertyUnit {
+  id          String   @id @default(uuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unitLabel   String
+  bedrooms    Int?
+  bathrooms  Float?
+  rentCents   Int?
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  conversations Conversation[]
+  applications  Application[]
+  leases        Lease[]
+
+  @@unique([propertyId, unitLabel])
+}
+
+model PropertyManagerAssignment {
+  id         String    @id @default(uuid())
+  propertyId String
+  property   Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedAt DateTime  @default(now())
+  revokedAt  DateTime?
+
+  @@unique([propertyId, userId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Conversations / Messaging (wired up in Phase 2)
+// ---------------------------------------------------------------------------
+
+model Conversation {
+  id                String             @id @default(uuid())
+  propertyId        String
+  property          Property           @relation(fields: [propertyId], references: [id])
+  unitId            String?
+  unit              PropertyUnit?      @relation(fields: [unitId], references: [id])
+  tenantId          String
+  tenant            User               @relation("ConversationTenant", fields: [tenantId], references: [id])
+  landlordId        String
+  landlord          User               @relation("ConversationLandlord", fields: [landlordId], references: [id])
+  status            ConversationStatus @default(NEW_INQUIRY)
+  applicationStatus ApplicationStatus  @default(NOT_STARTED)
+  leaseStatus       LeaseStatus        @default(NONE)
+  moderationStatus  ModerationStatus   @default(NONE)
+  createdAt         DateTime           @default(now())
+  lastMessageAt     DateTime?
+  closedAt          DateTime?
+
+  participants     ConversationParticipant[]
+  messages         Message[]
+  relayAssignments RelayAssignment[]
+  showings         Showing[]
+  applications     Application[]
+  leases           Lease[]
+  contactReleases  ContactRelease[]
+  moderationFlags  ModerationFlag[]
+  violations       Violation[]
+  adminNotes       AdminNote[]
+
+  @@index([propertyId])
+  @@index([tenantId])
+  @@index([landlordId])
+  @@index([status])
+}
+
+model ConversationParticipant {
+  id             String                      @id @default(uuid())
+  conversationId String
+  conversation   Conversation                @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User                        @relation(fields: [userId], references: [id])
+  role           ConversationParticipantRole
+  joinedAt       DateTime                    @default(now())
+  leftAt         DateTime?
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id                  String              @id @default(uuid())
+  conversationId      String
+  conversation        Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId            String?
+  sender               User?              @relation("MessageSender", fields: [senderId], references: [id])
+  recipientId          String?
+  recipient            User?              @relation("MessageRecipient", fields: [recipientId], references: [id])
+  direction            MessageDirection
+  channel              MessageChannel      @default(SMS)
+  originalContent      String
+  sanitizedContent     String?
+  moderationDecision   ModerationDecision  @default(PENDING)
+  status               MessageStatus       @default(RECEIVED)
+  providerMessageId    String?             @unique
+  idempotencyKey       String?             @unique
+  sentAt               DateTime?
+  deliveredAt          DateTime?
+  failedAt             DateTime?
+  errorCode            String?
+  errorMessage         String?
+  createdAt            DateTime            @default(now())
+
+  deliveries  MessageDelivery[]
+  attachments MessageAttachment[]
+  moderationFlags ModerationFlag[]
+  violations  Violation[]
+
+  @@index([conversationId])
+  @@index([status])
+}
+
+model MessageDelivery {
+  id                String         @id @default(uuid())
+  messageId         String
+  message           Message        @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  provider          String
+  providerMessageId String?
+  status            DeliveryStatus
+  rawPayload        Json?
+  occurredAt        DateTime
+  createdAt         DateTime       @default(now())
+
+  @@index([messageId])
+}
+
+model MessageAttachment {
+  id             String               @id @default(uuid())
+  messageId      String
+  message        Message              @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  storageKey     String
+  fileType       String
+  fileSizeBytes  Int
+  scanStatus     AttachmentScanStatus @default(PENDING)
+  scanResult     Json?
+  sanitizedStorageKey String?
+  createdAt      DateTime             @default(now())
+
+  @@index([messageId])
+}
+
+// ---------------------------------------------------------------------------
+// Relay number pool / routing
+// ---------------------------------------------------------------------------
+
+model RelayNumber {
+  id             String   @id @default(uuid())
+  phoneNumber    String   @unique
+  provider       String
+  isActive       Boolean  @default(true)
+  region         String?
+  capacityLimit  Int      @default(50)
+  createdAt      DateTime @default(now())
+
+  assignments RelayAssignment[]
+}
+
+model RelayAssignment {
+  id             String       @id @default(uuid())
+  relayNumberId  String
+  relayNumber    RelayNumber  @relation(fields: [relayNumberId], references: [id])
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  assignedAt     DateTime     @default(now())
+  releasedAt     DateTime?
+
+  @@unique([conversationId])
+  @@index([relayNumberId])
+}
+
+// ---------------------------------------------------------------------------
+// Showings (Phase 4)
+// ---------------------------------------------------------------------------
+
+model Showing {
+  id             String        @id @default(uuid())
+  conversationId String
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  status         ShowingStatus @default(REQUESTED)
+  scheduledAt    DateTime?
+  durationMinutes Int          @default(30)
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  cancelledAt    DateTime?
+  completedAt    DateTime?
+
+  timeSlots ShowingTimeSlot[]
+
+  @@index([conversationId])
+}
+
+model ShowingTimeSlot {
+  id         String   @id @default(uuid())
+  showingId  String
+  showing    Showing  @relation(fields: [showingId], references: [id], onDelete: Cascade)
+  proposedBy String
+  startTime  DateTime
+  endTime    DateTime
+  isSelected Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([showingId])
+}
+
+// ---------------------------------------------------------------------------
+// Applications / Leases (Phase 4)
+// ---------------------------------------------------------------------------
+
+model Application {
+  id             String            @id @default(uuid())
+  conversationId String
+  conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenantId       String
+  propertyId     String
+  unitId         String?
+  unit           PropertyUnit?     @relation(fields: [unitId], references: [id])
+  status         ApplicationStatus @default(STARTED)
+  submittedAt    DateTime?
+  decisionAt     DateTime?
+  decisionBy     String?
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([conversationId])
+  @@index([tenantId])
+}
+
+model Lease {
+  id             String      @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  propertyId     String
+  unitId         String?
+  unit           PropertyUnit? @relation(fields: [unitId], references: [id])
+  tenantId       String
+  landlordId     String
+  status         LeaseStatus @default(PENDING)
+  startDate      DateTime?
+  endDate        DateTime?
+  signedAt       DateTime?
+  documentStorageKey String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  contactReleases ContactRelease[]
+
+  @@index([conversationId])
+}
+
+model ContactRelease {
+  id                 String    @id @default(uuid())
+  conversationId      String
+  conversation        Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  leaseId            String?
+  lease               Lease?    @relation(fields: [leaseId], references: [id])
+  releasedBy          String
+  reason              String
+  releasedAt           DateTime  @default(now())
+  tenantNotifiedAt     DateTime?
+  landlordNotifiedAt   DateTime?
+  createdAt            DateTime  @default(now())
+
+  @@index([conversationId])
+}
+
+// ---------------------------------------------------------------------------
+// Moderation (Phase 3)
+// ---------------------------------------------------------------------------
+
+model ModerationFlag {
+  id               String            @id @default(uuid())
+  messageId        String
+  message          Message           @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  conversationId   String
+  conversation     Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  flagType         ViolationType
+  detectionMethod  DetectionMethod
+  confidenceScore  Float
+  status           ModerationStatus  @default(FLAGGED)
+  reviewedById     String?
+  reviewedBy       User?             @relation("ModerationFlagReviewer", fields: [reviewedById], references: [id])
+  reviewedAt       DateTime?
+  decision         String?
+  createdAt        DateTime          @default(now())
+
+  @@index([messageId])
+  @@index([conversationId])
+}
+
+model Violation {
+  id                 String          @id @default(uuid())
+  userId             String
+  user               User            @relation(fields: [userId], references: [id])
+  conversationId     String
+  conversation       Conversation    @relation(fields: [conversationId], references: [id])
+  messageId          String
+  message            Message         @relation(fields: [messageId], references: [id])
+  violationType      ViolationType
+  detectionMethod    DetectionMethod
+  confidenceScore    Float
+  originalContent    String
+  sanitizedContent   String?
+  actionTaken        ViolationAction
+  moderatorDecision  String?
+  createdAt          DateTime        @default(now())
+
+  @@index([userId])
+  @@index([conversationId])
+}
+
+model UserRestriction {
+  id             String          @id @default(uuid())
+  userId         String
+  user           User            @relation("RestrictionUser", fields: [userId], references: [id])
+  type           RestrictionType
+  reason         String
+  imposedById    String?
+  imposedBy      User?           @relation("RestrictionImposedBy", fields: [imposedById], references: [id])
+  startsAt       DateTime        @default(now())
+  endsAt         DateTime?
+  liftedAt       DateTime?
+  liftedById     String?
+  createdAt      DateTime        @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications / Consent (Phase 4/5)
+// ---------------------------------------------------------------------------
+
+model NotificationPreference {
+  id                      String    @id @default(uuid())
+  userId                  String    @unique
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  smsTransactionalConsent ConsentStatus @default(PENDING)
+  smsMarketingConsent     ConsentStatus @default(OPTED_OUT)
+  quietHoursStart         String?
+  quietHoursEnd           String?
+  timezone                String    @default("America/New_York")
+  consentUpdatedAt        DateTime  @default(now())
+  createdAt               DateTime  @default(now())
+}
+
+model ConsentEvent {
+  id          String      @id @default(uuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consentType ConsentType
+  status      ConsentStatus
+  source      String
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Audit / Admin
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model AdminNote {
+  id             String        @id @default(uuid())
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id])
+  authorId       String
+  author         User          @relation("AdminNoteAuthor", fields: [authorId], references: [id])
+  note           String
+  createdAt      DateTime      @default(now())
+
+  @@index([conversationId])
+}
