@@ -1,3 +1,29 @@
+export class UnitResponseDto {
+  id!: string;
+  propertyId!: string;
+  unitLabel!: string;
+  bedrooms!: number | null;
+  bathrooms!: number | null;
+  squareFeet!: number | null;
+  rentCents!: number | null;
+  isAvailable!: boolean;
+
+  static from(unit: {
+    id: string;
+    propertyId: string;
+    unitLabel: string;
+    bedrooms: number | null;
+    bathrooms: number | null;
+    squareFeet: number | null;
+    rentCents: number | null;
+    isAvailable: boolean;
+  }): UnitResponseDto {
+    const dto = new UnitResponseDto();
+    Object.assign(dto, unit);
+    return dto;
+  }
+}
+
 /**
  * Public-facing property shape (what prospective/current tenants see) never
  * includes the owner's user id, email, or any contact information — just a
@@ -15,8 +41,10 @@ export class PropertyResponseDto {
   monthlyRentCents!: number | null;
   depositCents!: number | null;
   petPolicy!: string | null;
+  photoUrl!: string | null;
   isActive!: boolean;
   landlordDisplayName!: string;
+  units!: UnitResponseDto[];
   createdAt!: Date;
   updatedAt!: Date;
 
@@ -38,12 +66,23 @@ export class PropertyResponseDto {
       monthlyRentCents: number | null;
       depositCents: number | null;
       petPolicy: string | null;
+      photoUrl: string | null;
       isActive: boolean;
       createdAt: Date;
       updatedAt: Date;
       ownerId: string;
       owner?: { profile?: { displayName: string } | null };
       managerAssignments?: { userId: string; revokedAt: Date | null }[];
+      units?: {
+        id: string;
+        propertyId: string;
+        unitLabel: string;
+        bedrooms: number | null;
+        bathrooms: number | null;
+        squareFeet: number | null;
+        rentCents: number | null;
+        isAvailable: boolean;
+      }[];
     },
     options: { includeManagement: boolean },
   ): PropertyResponseDto {
@@ -59,8 +98,10 @@ export class PropertyResponseDto {
     dto.monthlyRentCents = property.monthlyRentCents;
     dto.depositCents = property.depositCents;
     dto.petPolicy = property.petPolicy;
+    dto.photoUrl = property.photoUrl;
     dto.isActive = property.isActive;
     dto.landlordDisplayName = property.owner?.profile?.displayName ?? 'Property Management';
+    dto.units = (property.units ?? []).map((u) => UnitResponseDto.from(u));
     dto.createdAt = property.createdAt;
     dto.updatedAt = property.updatedAt;
 
@@ -71,30 +112,6 @@ export class PropertyResponseDto {
         .map((a) => a.userId);
     }
 
-    return dto;
-  }
-}
-
-export class UnitResponseDto {
-  id!: string;
-  propertyId!: string;
-  unitLabel!: string;
-  bedrooms!: number | null;
-  bathrooms!: number | null;
-  rentCents!: number | null;
-  isAvailable!: boolean;
-
-  static from(unit: {
-    id: string;
-    propertyId: string;
-    unitLabel: string;
-    bedrooms: number | null;
-    bathrooms: number | null;
-    rentCents: number | null;
-    isAvailable: boolean;
-  }): UnitResponseDto {
-    const dto = new UnitResponseDto();
-    Object.assign(dto, unit);
     return dto;
   }
 }

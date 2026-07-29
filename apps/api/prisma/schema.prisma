@@ -330,6 +330,7 @@ model Property {
   monthlyRentCents Int?
   depositCents     Int?
   petPolicy        String?
+  photoUrl         String?
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -349,6 +350,7 @@ model PropertyUnit {
   unitLabel   String
   bedrooms    Int?
   bathrooms  Float?
+  squareFeet  Int?
   rentCents   Int?
   isAvailable Boolean  @default(true)
   createdAt   DateTime @default(now())

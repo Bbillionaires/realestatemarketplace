@@ -59,17 +59,18 @@ flowchart LR
     AppModule --> UsersModule
     AppModule --> PhoneModule
     AppModule --> PropertiesModule
-    AppModule --> ConversationsModule["ConversationsModule (Phase 2)"]
-    AppModule --> MessagesModule["MessagesModule (Phase 2)"]
+    AppModule --> ConversationsModule
+    AppModule --> MessagesModule
     AppModule --> SmsModule
-    AppModule --> ModerationModule["ModerationModule (Phase 3)"]
+    AppModule --> SmsWebhooksModule["SmsWebhooksModule (inbound + delivery-status)"]
+    AppModule --> ModerationModule["ModerationModule (regex/keyword gate now; full layered system in Phase 3)"]
     AppModule --> SchedulingModule["SchedulingModule (Phase 4)"]
     AppModule --> AdminModule["AdminModule (Phase 5)"]
     AppModule --> AuditModule
     AppModule --> CommonModule
     SmsModule -.implements.-> SmsProviderInterface["SmsProvider interface"]
     SmsProviderInterface --> MockProvider
-    SmsProviderInterface --> TwilioProvider["TwilioProvider (Phase 2)"]
+    SmsProviderInterface --> TwilioProvider["TwilioProvider (not yet implemented)"]
     SmsProviderInterface --> TelnyxProvider["TelnyxProvider (future)"]
 ```
 
@@ -102,8 +103,16 @@ interface. `MockSmsProvider` (Phase 1) implements it entirely in memory for loca
    serializes a raw Prisma row, so a schema change can't accidentally leak a new sensitive field.
 4. Dashboards only ever receive a masked number (`(***) ***-1234`) computed server-side from
    `last4`; the full number is decrypted only inside the SMS-send code path.
-5. In Phase 2, landlord and tenant SMS traffic is relayed entirely through pooled `RelayNumber`s —
-   neither party's device ever sees the other's number in their native messaging app.
+5. Landlord and tenant SMS traffic is relayed entirely through pooled `RelayNumber`s (see
+   `ConversationsService.assignRelayNumber` and `SmsRoutingService`) — neither party's device
+   ever sees the other's number in their native messaging app, and the real recipient number is
+   only ever decrypted inside `MessagesService` at the moment of the provider `sendMessage` call.
+6. Beyond the phone number itself, the tenant's *identity* stays anonymized to the landlord
+   during the inquiry stage: `ConversationResponseDto.tenantDisplayName` and every
+   `MessageResponseDto.senderDisplayName` for a tenant-authored message render as `Tenant #1234`
+   (a deterministic, non-reversible HMAC-derived label — see
+   `common/utils/anonymized-label.util.ts`), never the tenant's real profile name, matching the
+   same label used in the SMS notification text.
 
 ## Database relationship diagram
 

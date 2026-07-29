@@ -12,6 +12,7 @@ const STAFF_ROLES: Role[] = [Role.STAFF_MODERATOR, Role.ADMINISTRATOR, Role.SUPE
 const PROPERTY_INCLUDE = {
   owner: { include: { profile: true } },
   managerAssignments: true,
+  units: true,
 } as const;
 
 @Injectable()

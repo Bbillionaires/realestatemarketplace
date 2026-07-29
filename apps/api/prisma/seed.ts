@@ -119,22 +119,22 @@ async function main() {
   });
 
   const property = await prisma.property.upsert({
-    where: { id: '00000000-0000-0000-0000-000000000001' },
+    where: { id: '00000000-0000-4000-8000-000000000001' },
     update: {},
     create: {
-      id: '00000000-0000-0000-0000-000000000001',
+      id: '00000000-0000-4000-8000-000000000001',
       ownerId: landlord.id,
       title: '123 Main Street',
       addressLine1: '123 Main Street',
       city: 'Jacksonville',
       state: 'FL',
       zip: '32202',
-      description: 'Charming 3-bed, 2-bath single family home near downtown.',
+      description: 'Charming 3-bed, 2-bath single family home near downtown. Fully renovated with new floors, kitchen, and bathrooms.',
       monthlyRentCents: 185000,
       depositCents: 185000,
       petPolicy: 'Cats and small dogs welcome with pet deposit.',
       units: {
-        create: [{ unitLabel: 'Main', bedrooms: 3, bathrooms: 2, rentCents: 185000 }],
+        create: [{ unitLabel: 'Main', bedrooms: 3, bathrooms: 2, squareFeet: 1450, rentCents: 185000 }],
       },
       managerAssignments: {
         create: [{ userId: propertyManager.id }],
@@ -143,24 +143,34 @@ async function main() {
   });
 
   await prisma.property.upsert({
-    where: { id: '00000000-0000-0000-0000-000000000002' },
+    where: { id: '00000000-0000-4000-8000-000000000002' },
     update: {},
     create: {
-      id: '00000000-0000-0000-0000-000000000002',
+      id: '00000000-0000-4000-8000-000000000002',
       ownerId: landlord.id,
       title: '455 Oak Avenue',
       addressLine1: '455 Oak Avenue',
       city: 'Jacksonville',
       state: 'FL',
       zip: '32204',
-      description: 'Modern 2-bed apartment with in-unit laundry.',
+      description: 'Modern 2-bed apartment with in-unit laundry and updated fixtures throughout.',
       monthlyRentCents: 145000,
       depositCents: 145000,
+      petPolicy: 'No pets allowed.',
       units: {
-        create: [{ unitLabel: 'Apt 2B', bedrooms: 2, bathrooms: 1, rentCents: 145000 }],
+        create: [{ unitLabel: 'Apt 2B', bedrooms: 2, bathrooms: 1, squareFeet: 900, rentCents: 145000 }],
       },
     },
   });
+
+  const relayNumbers = ['+18885550101', '+18885550102', '+18885550103'];
+  for (const phoneNumber of relayNumbers) {
+    await prisma.relayNumber.upsert({
+      where: { phoneNumber },
+      update: {},
+      create: { phoneNumber, provider: 'mock', region: 'US', capacityLimit: 50 },
+    });
+  }
 
   console.log('Seed complete:', {
     superAdmin: superAdmin.email,

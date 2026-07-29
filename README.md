@@ -5,8 +5,8 @@ landlords/property managers text each other at native-SMS speed while every mess
 relayed, moderated, and logged by the platform — neither side ever sees the other's real
 phone number.
 
-> **Status: Phase 1 (Foundation) complete.** See [Implementation phases](#implementation-phases)
-> below for what's built vs. planned.
+> **Status: Phase 1 (Foundation) and Phase 2 (Messaging) complete.** See
+> [Implementation phases](#implementation-phases) below for what's built vs. planned.
 
 ## Contents
 
@@ -20,9 +20,9 @@ phone number.
 |---|---|
 | API | Node.js + TypeScript + **NestJS** (DI-based module boundaries, Guards for RBAC) |
 | Database | PostgreSQL + **Prisma ORM** |
-| Cache / queues / rate limits | **Redis** (BullMQ queues land in Phase 2+) |
+| Cache / queues / rate limits | **Redis** (rate limits + SMS routing-menu state now; BullMQ queues land in Phase 5) |
 | Dashboard | **Next.js** (App Router) |
-| SMS | Provider-agnostic `SmsProvider` interface; Mock provider now, Twilio in Phase 2 |
+| SMS | Provider-agnostic `SmsProvider` interface; Mock provider now, Twilio/Telnyx implementations are a drop-in for Phase 5 |
 | Auth | JWT access tokens + rotating opaque refresh tokens, Argon2id password hashing |
 | Containerization | Docker + Docker Compose |
 
@@ -40,14 +40,20 @@ apps/
       users/             Profiles, admin user management, RBAC role changes
       phone/             OTP phone verification (encrypted storage, masked responses)
       properties/        Property + unit CRUD, manager assignment
-      sms/               SmsProvider interface, Mock provider, DI wiring
+      conversations/     Tenant-starts-conversation flow, relay assignment, RBAC
+      messages/          Compose/list, moderation gate, SMS relay send, inbound ingestion
+      moderation/        Contact-info detector (regex/normalization/keyword) + violation escalation
+      sms/               SmsProvider interface, Mock provider, inbound/delivery webhooks, routing
       audit/             AuditLog service + admin endpoint
-      common/            Guards, decorators, crypto/phone utils, filters, interceptors
+      common/            Guards, decorators, crypto/phone/anonymization utils, filters, interceptors
       redis/             Redis client + rate limiter
       prisma/            PrismaService
       config/            Env loading + validation
     test/                e2e tests (supertest against a real Nest app + test DB)
-  dashboard/             Next.js dashboard (login + property list wired to the API)
+  dashboard/             Next.js dashboard
+    src/app/properties/          Browse + detail pages (photo, tabs, sticky "Message Landlord" bar)
+    src/app/inbox/                Conversation list
+    src/app/conversations/[id]/   Message thread + reply box
 docker/
 docs/
   architecture.md         Mermaid diagrams + design notes
@@ -98,8 +104,15 @@ npm run prisma:seed --workspace=apps/api
 ```
 
 The seed script creates one user per role (see `apps/api/prisma/seed.ts`) all with password
-`DevPassword123!`, plus two sample properties ("123 Main Street", "455 Oak Avenue") — the same
-ones used in the routing-menu example in the spec.
+`DevPassword123!`, two sample properties ("123 Main Street", "455 Oak Avenue") — the same ones
+used in the routing-menu example in the spec — and a small pool of relay phone numbers so
+conversations can be started immediately.
+
+Try the messaging flow: sign in as `tenant@example.com`, open a property, tap **Message
+Landlord**, send an inquiry. Sign in as `landlord@example.com` in another browser/incognito
+window, open **Inbox**, and reply — the tenant sees the reply on refresh (the dashboard polls
+every 5s). Try including a phone number or email in a message to see it get blocked instead of
+forwarded.
 
 ### Run the app
 
@@ -123,8 +136,9 @@ npm run test:e2e
 `apps/api/.env.test` holds non-secret, dev-only test configuration (dummy JWT/encryption keys)
 and points at a separate `_test` database so `npm run test:e2e` never touches dev data.
 
-### What's covered in Phase 1
+### What's covered
 
+**Phase 1** —
 - **Auth**: registration (role allow-listing), login, refresh-token rotation, reuse-detection
   (a replayed refresh token revokes its whole token family), suspended-user lockout.
 - **RBAC**: route-level role guards; an `ADMINISTRATOR` cannot escalate anyone to
@@ -136,9 +150,28 @@ and points at a separate `_test` database so `npm run test:e2e` never touches de
   prospective tenant never receives `ownerId`/manager IDs while the owning landlord does.
 - **Audit logging**: every mutating action under test asserts a matching `AuditLog` row.
 
-## API surface (Phase 1)
+**Phase 2** (`test/conversations.e2e-spec.ts`, `test/sms-webhooks.e2e-spec.ts`) —
+- **Conversation lifecycle**: tenant-initiated only, relay-number auto-assignment, reuse of an
+  existing open conversation for the same tenant+property instead of duplicating it, status
+  transition `NEW_INQUIRY → ACTIVE` on the landlord's first reply.
+- **Anonymity**: the tenant is shown to the landlord as `Tenant #1234` everywhere (conversation
+  header *and* every message bubble) — the tenant's real profile name is asserted absent from
+  every landlord-facing response.
+- **RBAC**: only conversation participants (or staff/admin) can view a conversation or its
+  messages.
+- **Moderation gate**: a message containing a phone number is blocked, never forwarded, visible
+  only to its own sender (not the other party), and recorded as a `Violation`; three violations
+  escalate warning → strong warning → 24h `UserRestriction`, after which further sends are
+  rejected outright.
+- **SMS webhooks**: inbound messages route to the correct conversation by relay number + sender
+  phone hash; a duplicate webhook delivery (same provider message ID) never creates a duplicate
+  message; when the same phone/relay pair matches more than one conversation, a numbered menu is
+  texted back and the *original* message is delivered once the sender picks a number (the digit
+  reply itself is never stored as a message); delivery-status callbacks update message status.
 
-All routes are prefixed with `/api`. Every route except `/auth/*` requires
+## API surface
+
+All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webhooks/*` requires
 `Authorization: Bearer <accessToken>`.
 
 | Method | Path | Notes |
@@ -157,6 +190,11 @@ All routes are prefixed with `/api`. Every route except `/auth/*` requires
 | PATCH | `/properties/:id` | Owner, assigned manager, or staff/admin |
 | POST/PATCH | `/properties/:id/managers`, `/managers/:userId/revoke` | |
 | GET/POST/PATCH | `/properties/:id/units`, `/units/:unitId` | |
+| POST | `/conversations` | Tenant-only: starts (or reuses) a conversation + sends the first message |
+| GET | `/conversations`, `/conversations/:id` | Participant (or staff/admin) only |
+| GET/POST | `/conversations/:id/messages` | Send runs the moderation gate before any relay/forward |
+| POST | `/sms/webhooks/inbound` | Carrier webhook — routes to a conversation, or texts back a disambiguation menu |
+| POST | `/sms/webhooks/delivery-status` | Carrier delivery-status callback |
 | GET | `/audit-logs` | Admin/staff only |
 
 ## Security notes
@@ -170,8 +208,30 @@ All routes are prefixed with `/api`. Every route except `/auth/*` requires
   session family).
 - **Transport**: `helmet()` security headers, CORS restricted to the configured dashboard origin,
   global input validation (`whitelist + forbidNonWhitelisted`) via class-validator.
-- **Rate limiting**: global Nest Throttler plus a Redis-backed limiter specifically for OTP
-  send/confirm attempts (per-user and per-phone-number).
+- **Rate limiting**: global Nest Throttler (`GLOBAL_RATE_LIMIT_PER_MIN`, default 300/min per IP)
+  plus a stricter per-route limit on `/auth/*` (`AUTH_RATE_LIMIT_PER_MIN`, default 10/min — read
+  directly from `process.env` at module-load time since `@Throttle()` is evaluated before Nest's
+  DI container exists, which is why `main.ts` loads dotenv as its very first import) and a
+  Redis-backed limiter specifically for OTP send/confirm attempts (per-user and per-phone-number).
+- **Message moderation gate**: every message — composed in-app or received via inbound SMS —
+  runs through a deterministic contact-info detector (phone/email/URL regexes, an "at"/"dot"
+  normalization pass, and keyword rules for social/payment handles and off-platform requests)
+  *before* it is ever stored as delivered or relayed. A hit blocks the message (visible only to
+  its own sender, so they can edit and resend), records a `Violation`, and escalates: 1st hit →
+  educational warning, 2nd → stronger warning, 3rd → 24h messaging restriction, 4th+ → flagged
+  for moderator review. This is intentionally the *minimal* rule-based layer — Phase 3 adds full
+  word-to-digit normalization, pattern recognition, message-history analysis, an AI fallback, and
+  image analysis on top of the same gate.
+- **Tenant anonymity**: until a Phase 4 contact-release event, the tenant is shown to the
+  landlord/property manager only as an anonymized `Tenant #1234` label (deterministic HMAC of
+  their user ID, truncated to 4 digits) — in the conversation header, every message bubble, and
+  the SMS notification text. Their real profile name never appears in anything the landlord can
+  see; e2e tests assert this explicitly.
+- **SMS relay privacy**: neither party's real phone number is ever used as the SMS "from"/"to"
+  visible to the other side — every send uses the conversation's assigned `RelayNumber`, and
+  routing an inbound reply never depends solely on (senderPhone, relayNumber), since that pair is
+  reused across many conversations; when it's ambiguous, the platform texts back a numbered menu
+  instead of guessing.
 - **Least privilege**: an `ADMINISTRATOR` cannot grant `ADMINISTRATOR`/`SUPER_ADMINISTRATOR` —
   only a `SUPER_ADMINISTRATOR` can, preventing a single compromised admin account from minting
   more admins.
@@ -205,13 +265,18 @@ a load balancer/reverse proxy in front of both `api` and `dashboard`, and run
       user profiles, phone verification (OTP via a pluggable `SmsProvider`, mock implementation
       for dev/test), property + unit management, the full Prisma schema (all phases), audit
       logging.
-- [ ] **Phase 2 — Messaging**: conversations, messages, Twilio/Telnyx `SmsProvider`
-      implementations, inbound SMS webhook, outbound SMS, relay-number routing (including the
-      numbered-menu disambiguation flow), delivery-status tracking, property-specific threads.
-- [ ] **Phase 3 — Safety and moderation**: contact-information detection (regex, normalization,
-      keyword/pattern rules, history analysis, optional AI fallback, image analysis), message
-      blocking with sender-edit flow, escalating violations, moderator dashboard, fraud/abuse
-      protections.
+- [x] **Phase 2 — Messaging**: conversations (tenant-initiated, relay-assigned, one per
+      tenant+property), messages (compose + list, moderation gate, SMS relay send), inbound SMS
+      webhook with routing + numbered-menu disambiguation + idempotency, delivery-status webhook,
+      property-specific threads, redesigned property browse/detail UI with a sticky "Message
+      Landlord" CTA, landlord inbox + tenant/landlord conversation thread views. A minimal
+      rule-based moderation gate (regex + basic normalization + keyword rules) with escalating
+      enforcement ships now; Twilio/Telnyx `SmsProvider` implementations are the remaining piece
+      for a real carrier (currently mocked end-to-end).
+- [ ] **Phase 3 — Safety and moderation**: full layered contact-information detection (word-to-
+      digit normalization, letter/number substitution, pattern recognition, message-history
+      analysis, optional AI fallback, image analysis for attachments), moderator dashboard,
+      administrator override, fraud/abuse protections beyond the Phase 2 baseline.
 - [ ] **Phase 4 — Scheduling and applications**: showing scheduler + SMS reminders, application
       status, lease status, contact-release rules.
 - [ ] **Phase 5 — Production readiness**: BullMQ queue workers for all async work, retry/DLQ

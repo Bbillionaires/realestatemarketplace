@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import configuration from './config/configuration';
+import configuration, { AppConfig } from './config/configuration';
 import { validate } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
@@ -13,6 +13,10 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { PhoneModule } from './phone/phone.module';
 import { PropertiesModule } from './properties/properties.module';
+import { ModerationModule } from './moderation/moderation.module';
+import { MessagesModule } from './messages/messages.module';
+import { ConversationsModule } from './conversations/conversations.module';
+import { SmsWebhooksModule } from './sms/sms-webhooks.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -21,7 +25,20 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration], validate }),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService<AppConfig>) => [
+        {
+          ttl: 60_000,
+          // Global abuse-prevention ceiling shared across all routes per IP.
+          // Sensitive routes (auth, OTP) layer stricter per-route @Throttle
+          // limits on top of this — this one just has to be generous enough
+          // that legitimate traffic (e.g. the dashboard's 5s message-thread
+          // polling across several users behind the same NAT) never trips it.
+          limit: (configService.get('rateLimits', { infer: true }) as AppConfig['rateLimits']).globalPerMin,
+        },
+      ],
+    }),
     PrismaModule,
     RedisModule,
     CommonModule,
@@ -31,6 +48,10 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     UsersModule,
     PhoneModule,
     PropertiesModule,
+    ModerationModule,
+    MessagesModule,
+    ConversationsModule,
+    SmsWebhooksModule,
   ],
   providers: [
     // Order matters: JwtAuthGuard populates request.user, then RolesGuard

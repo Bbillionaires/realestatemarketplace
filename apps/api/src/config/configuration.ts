@@ -25,6 +25,7 @@ export interface AppConfig {
   appBaseUrl: string;
   dashboardBaseUrl: string;
   rateLimits: {
+    globalPerMin: number;
     authPerMin: number;
     smsSendPerMin: number;
     otpMaxAttempts: number;
@@ -59,6 +60,7 @@ export default (): AppConfig => ({
   appBaseUrl: process.env.APP_BASE_URL ?? 'http://localhost:3001',
   dashboardBaseUrl: process.env.DASHBOARD_BASE_URL ?? 'http://localhost:3000',
   rateLimits: {
+    globalPerMin: parseInt(process.env.GLOBAL_RATE_LIMIT_PER_MIN ?? '300', 10),
     authPerMin: parseInt(process.env.AUTH_RATE_LIMIT_PER_MIN ?? '10', 10),
     smsSendPerMin: parseInt(process.env.SMS_SEND_RATE_LIMIT_PER_MIN ?? '5', 10),
     otpMaxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS ?? '5', 10),

@@ -1,0 +1,216 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { api, ConversationSummary, MessageSummary } from '../../../lib/api';
+import { useAuth } from '../../../lib/auth-context';
+import { useCurrentUser } from '../../../lib/use-current-user';
+import { formatDateTime } from '../../../lib/format';
+import { theme } from '../../../lib/theme';
+import { NavBar } from '../../../components/NavBar';
+
+const POLL_INTERVAL_MS = 5000;
+
+export default function ConversationThreadPage() {
+  const { id } = useParams<{ id: string }>();
+  const { accessToken, isLoading: authLoading } = useAuth();
+  const { user } = useCurrentUser();
+  const router = useRouter();
+
+  const [conversation, setConversation] = useState<ConversationSummary | null>(null);
+  const [messages, setMessages] = useState<MessageSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [reply, setReply] = useState('');
+  const [sending, setSending] = useState(false);
+  const [guidance, setGuidance] = useState<string | null>(null);
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const refresh = useCallback(async () => {
+    if (!accessToken) return;
+    const [conv, msgs] = await Promise.all([
+      api.getConversation(accessToken, id),
+      api.listMessages(accessToken, id),
+    ]);
+    setConversation(conv);
+    setMessages(msgs);
+  }, [accessToken, id]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!accessToken) {
+      router.push('/login');
+      return;
+    }
+    refresh()
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load conversation'))
+      .finally(() => setLoading(false));
+
+    const interval = setInterval(() => {
+      refresh().catch(() => undefined);
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [accessToken, authLoading, refresh, router]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length]);
+
+  async function submitReply() {
+    if (!accessToken || reply.trim().length === 0) return;
+    setSending(true);
+    setGuidance(null);
+    try {
+      const result = await api.sendMessage(accessToken, id, reply);
+      if (result.delivered) {
+        setReply('');
+      } else {
+        setGuidance(result.guidance ?? 'Your message was not delivered. Please edit and try again.');
+      }
+      await refresh();
+    } catch (err) {
+      setGuidance(err instanceof Error ? err.message : 'Failed to send message');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <main style={{ minHeight: '100vh', background: theme.bg }}>
+        <NavBar />
+        <p style={{ padding: 24 }}>Loading...</p>
+      </main>
+    );
+  }
+
+  if (error || !conversation) {
+    return (
+      <main style={{ minHeight: '100vh', background: theme.bg }}>
+        <NavBar />
+        <p style={{ padding: 24, color: theme.danger }}>{error ?? 'Conversation not found'}</p>
+      </main>
+    );
+  }
+
+  const isTenantView = user?.role === 'PROSPECTIVE_TENANT' || user?.role === 'CURRENT_TENANT';
+
+  return (
+    <main style={{ minHeight: '100vh', background: theme.bg, display: 'flex', flexDirection: 'column' }}>
+      <NavBar />
+      <div style={{ maxWidth: 700, width: '100%', margin: '0 auto', padding: 24, flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <Link href="/inbox" style={{ color: theme.primary, fontSize: 14, textDecoration: 'none' }}>
+          ← Back to inbox
+        </Link>
+
+        <div style={{ marginTop: 8, marginBottom: 16 }}>
+          <h1 style={{ fontSize: 18, margin: 0 }}>{conversation.property.title}</h1>
+          <p style={{ color: theme.textMuted, fontSize: 13, margin: '2px 0' }}>
+            {conversation.property.addressLine1}, {conversation.property.city}, {conversation.property.state}
+          </p>
+          <p style={{ fontSize: 13, margin: 0 }}>
+            {isTenantView ? conversation.landlordDisplayName : conversation.tenantDisplayName}
+            {conversation.relayPhoneNumber && (
+              <span style={{ color: theme.textMuted }}> · relayed via {conversation.relayPhoneNumber}</span>
+            )}
+          </p>
+        </div>
+
+        <div
+          style={{
+            flex: 1,
+            background: theme.card,
+            border: `1px solid ${theme.border}`,
+            borderRadius: 10,
+            padding: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            minHeight: 300,
+            maxHeight: 500,
+            overflowY: 'auto',
+          }}
+        >
+          {messages.length === 0 && <p style={{ color: theme.textMuted }}>No messages yet.</p>}
+          {messages.map((m) => {
+            const isMine = m.senderId === user?.id;
+            const isBlocked = m.status === 'BLOCKED';
+            return (
+              <div key={m.id} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start' }}>
+                <div
+                  style={{
+                    maxWidth: '75%',
+                    padding: '8px 12px',
+                    borderRadius: 12,
+                    background: isBlocked ? theme.warningBg : isMine ? theme.primary : '#eef1f5',
+                    color: isBlocked ? theme.warningText : isMine ? 'white' : theme.text,
+                    fontSize: 14,
+                  }}
+                >
+                  {isBlocked && (
+                    <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 4 }}>
+                      NOT DELIVERED — contains restricted content
+                    </div>
+                  )}
+                  <div>{m.content}</div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      marginTop: 4,
+                      opacity: 0.8,
+                      color: isBlocked ? theme.warningText : isMine ? 'white' : theme.textMuted,
+                    }}
+                  >
+                    {m.senderDisplayName} · {formatDateTime(m.createdAt)}
+                    {m.channel === 'SMS' ? ' · via SMS' : ''}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
+
+        {guidance && (
+          <p style={{ background: theme.warningBg, color: theme.warningText, padding: 10, borderRadius: 8, fontSize: 13, marginTop: 12 }}>
+            {guidance}
+          </p>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, marginBottom: 24 }}>
+          <textarea
+            value={reply}
+            onChange={(e) => setReply(e.target.value)}
+            placeholder="Type a message..."
+            rows={2}
+            style={{ flex: 1, padding: 10, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 14, fontFamily: 'inherit' }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submitReply();
+              }
+            }}
+          />
+          <button
+            onClick={submitReply}
+            disabled={sending || reply.trim().length === 0}
+            style={{
+              padding: '0 20px',
+              borderRadius: 8,
+              border: 'none',
+              background: theme.primary,
+              color: 'white',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}

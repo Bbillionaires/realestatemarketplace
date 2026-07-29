@@ -11,8 +11,14 @@ function requestContext(req: Request) {
   return { ipAddress: req.ip, userAgent: req.headers['user-agent'] };
 }
 
+// @Throttle is evaluated when this module is first imported (before Nest's
+// DI container exists), so it can't be resolved via ConfigService — it
+// reads process.env directly instead. main.ts loads dotenv before
+// importing AppModule specifically to make this env var available in time.
+const AUTH_RATE_LIMIT_PER_MIN = parseInt(process.env.AUTH_RATE_LIMIT_PER_MIN ?? '10', 10);
+
 @Controller('auth')
-@Throttle({ default: { limit: 10, ttl: 60_000 } })
+@Throttle({ default: { limit: AUTH_RATE_LIMIT_PER_MIN, ttl: 60_000 } })
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

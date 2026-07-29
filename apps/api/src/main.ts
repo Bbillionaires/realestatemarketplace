@@ -1,3 +1,7 @@
+// Must be the very first import: some decorators (e.g. @Throttle on
+// AuthController) read rate-limit values from process.env at module-load
+// time, which happens before Nest's own ConfigModule has a chance to run.
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
