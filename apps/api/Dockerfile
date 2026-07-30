@@ -1,4 +1,9 @@
 FROM node:20-alpine AS builder
+# Prisma's schema/query engine binaries link against libssl, which the base
+# alpine image doesn't ship — without this, prisma generate/migrate fail at
+# runtime with "Could not parse schema engine response" (it silently prints
+# an OpenSSL-not-found warning to stdout instead of erroring where you'd see it).
+RUN apk add --no-cache openssl
 WORKDIR /repo
 COPY package.json package-lock.json* ./
 COPY apps/api/package.json apps/api/package.json
@@ -10,6 +15,7 @@ RUN npx prisma generate
 RUN npm run build
 
 FROM node:20-alpine
+RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NODE_ENV=production
 # npm workspaces hoists shared dependencies (including the generated
