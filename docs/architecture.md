@@ -63,8 +63,9 @@ flowchart LR
     AppModule --> MessagesModule
     AppModule --> SmsModule
     AppModule --> SmsWebhooksModule["SmsWebhooksModule (inbound + delivery-status)"]
-    AppModule --> ModerationModule["ModerationModule (regex/keyword gate now; full layered system in Phase 3)"]
-    AppModule --> SchedulingModule["SchedulingModule (Phase 4)"]
+    AppModule --> ModerationModule["ModerationModule (regex/normalization/history-analysis/AI-fallback gate + moderator admin API)"]
+    AppModule --> ShowingsModule
+    AppModule --> RealtimeModule["RealtimeModule (Socket.IO gateway)"]
     AppModule --> AdminModule["AdminModule (Phase 5)"]
     AppModule --> AuditModule
     AppModule --> CommonModule

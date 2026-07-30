@@ -17,6 +17,8 @@ import { ModerationModule } from './moderation/moderation.module';
 import { MessagesModule } from './messages/messages.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { SmsWebhooksModule } from './sms/sms-webhooks.module';
+import { RealtimeModule } from './realtime/realtime.module';
+import { ShowingsModule } from './showings/showings.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -41,6 +43,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     }),
     PrismaModule,
     RedisModule,
+    RealtimeModule,
     CommonModule,
     AuditModule,
     SmsModule,
@@ -52,6 +55,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     MessagesModule,
     ConversationsModule,
     SmsWebhooksModule,
+    ShowingsModule,
   ],
   providers: [
     // Order matters: JwtAuthGuard populates request.user, then RolesGuard

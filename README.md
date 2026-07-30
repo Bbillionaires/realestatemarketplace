@@ -5,8 +5,10 @@ landlords/property managers text each other at native-SMS speed while every mess
 relayed, moderated, and logged by the platform — neither side ever sees the other's real
 phone number.
 
-> **Status: Phase 1 (Foundation) and Phase 2 (Messaging) complete.** See
-> [Implementation phases](#implementation-phases) below for what's built vs. planned.
+> **Status: Phase 1 (Foundation), Phase 2 (Messaging), and Phase 3 (Safety and moderation)
+> complete**, plus the showing/tour scheduler and real-time (WebSocket) updates pulled forward
+> from Phase 4. See [Implementation phases](#implementation-phases) below for what's built vs.
+> planned.
 
 ## Contents
 
@@ -42,7 +44,12 @@ apps/
       properties/        Property + unit CRUD, manager assignment
       conversations/     Tenant-starts-conversation flow, relay assignment, RBAC
       messages/          Compose/list, moderation gate, SMS relay send, inbound ingestion
-      moderation/        Contact-info detector (regex/normalization/keyword) + violation escalation
+      moderation/        Contact-info detector (regex/normalization/pattern/keyword), message-
+                         history split-detection + AI-fallback layer (pluggable, mocked), violation
+                         escalation, and the moderator-facing admin API (flags/violations/
+                         restrictions/admin notes)
+      showings/          Showing/tour time-slot proposal + accept + cancel, nested under a conversation
+      realtime/          Socket.IO gateway broadcasting new messages / conversation / showing updates
       sms/               SmsProvider interface, Mock provider, inbound/delivery webhooks, routing
       audit/             AuditLog service + admin endpoint
       common/            Guards, decorators, crypto/phone/anonymization utils, filters, interceptors
@@ -52,8 +59,11 @@ apps/
     test/                e2e tests (supertest against a real Nest app + test DB)
   dashboard/             Next.js dashboard
     src/app/properties/          Browse + detail pages (photo, tabs, sticky "Message Landlord" bar)
-    src/app/inbox/                Conversation list
-    src/app/conversations/[id]/   Message thread + reply box
+    src/app/inbox/                Conversation list — property/status filters, unread indicator, unit label, last-message preview
+    src/app/conversations/[id]/   Message thread + reply box, showing panel, live Socket.IO updates (polling only as a fallback)
+    src/app/moderation/           Staff-only moderator dashboard: flag queue, review, violation/restriction history, admin notes
+    src/components/ShowingPanel.tsx  Propose/accept/cancel a showing time slot from the thread
+    src/lib/use-conversation-socket.ts  Socket.IO client hook used by the conversation thread
 docker/
 docs/
   architecture.md         Mermaid diagrams + design notes
@@ -110,9 +120,12 @@ conversations can be started immediately.
 
 Try the messaging flow: sign in as `tenant@example.com`, open a property, tap **Message
 Landlord**, send an inquiry. Sign in as `landlord@example.com` in another browser/incognito
-window, open **Inbox**, and reply — the tenant sees the reply on refresh (the dashboard polls
-every 5s). Try including a phone number or email in a message to see it get blocked instead of
-forwarded.
+window, open **Inbox**, and reply — the tenant sees the reply appear live (Socket.IO push, with a
+30s poll purely as a fallback if the socket drops). Try including a phone number or email in a
+message to see it get blocked instead of forwarded — including a spelled-out or lightly disguised
+one ("nine zero four... " or "9O4-555-1234"), or one split across two separate messages. Sign in
+as `moderator@example.com` and open **Moderation** to review anything escalated to staff (4th+
+violation from the same user).
 
 ### Run the app
 
@@ -169,6 +182,28 @@ and points at a separate `_test` database so `npm run test:e2e` never touches de
   texted back and the *original* message is delivered once the sender picks a number (the digit
   reply itself is never stored as a message); delivery-status callbacks update message status.
 
+**Phase 3** (`contact-info-detector.util.spec.ts`, `test/moderation-admin.e2e-spec.ts`, plus the
+history-split case added to `test/conversations.e2e-spec.ts`) —
+- **Full normalization**: spelled-out phone numbers ("nine zero four..."), letter/number
+  lookalike substitution ("9O4-555-1234"), whitespace/dash-collapsed digit groups, and bare
+  unpunctuated 10-digit runs are all detected — while ordinary counts/measurements ("3 bedroom 2
+  bathroom", "four kids and two dogs") and casual words ("lol", "cool") are explicitly asserted
+  *not* to false-positive.
+- **Message-history analysis**: contact info deliberately split across two separate messages from
+  the same sender in the same conversation ("nine zero four five five five" then "one two three
+  four thanks") is caught on the message that completes it, tagged `HISTORY_ANALYSIS`, scoped to a
+  short lookback window (message count + elapsed time) so unrelated numbers mentioned much earlier
+  in a long conversation are never coincidentally stitched together.
+- **AI fallback layer**: a real `AiModerationProvider` DI seam (`AI_MODERATION_PROVIDER` token)
+  sits behind every deterministic rule, consulted only if all of them find nothing — bound to a
+  `NullAiModerationProvider` mock in this environment (no external AI key configured), swappable
+  for a real provider without any caller changing, exactly like `SmsProvider`.
+- **Moderator dashboard**: staff-only RBAC on every `/moderation/*` route; the full
+  escalation-then-review lifecycle (3 violations → warnings → 24h auto-restriction → staff lifts
+  it → next violation escalates straight to `MODERATOR_REVIEW` → a `ModerationFlag` appears in the
+  queue); reviewing a flag (clear/keep-under-review/confirm-block); imposing and lifting a
+  restriction by hand; adding and listing admin notes on a conversation.
+
 ## API surface
 
 All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webhooks/*` requires
@@ -195,7 +230,17 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | GET/POST | `/conversations/:id/messages` | Send runs the moderation gate before any relay/forward |
 | POST | `/sms/webhooks/inbound` | Carrier webhook — routes to a conversation, or texts back a disambiguation menu |
 | POST | `/sms/webhooks/delivery-status` | Carrier delivery-status callback |
+| GET/POST | `/conversations/:id/showings` | Propose a showing / list showings for a conversation |
+| PATCH | `/conversations/:id/showings/:showingId/slots/:slotId/accept` | Accept a proposed time slot |
+| PATCH | `/conversations/:id/showings/:showingId/cancel`, `/complete` | |
+| GET | `/moderation/flags` | Staff/admin only — filterable by `status`; defaults to `FLAGGED`+`UNDER_REVIEW` |
+| GET/PATCH | `/moderation/flags/:id`, `/flags/:id/review` | Review a flag: clear / keep under review / confirm block, with an optional note |
+| GET | `/moderation/users/:userId/violations`, `/restrictions` | Staff/admin only |
+| POST | `/moderation/users/:userId/restrictions` | Impose a messaging restriction/suspension by hand |
+| POST | `/moderation/restrictions/:id/lift` | Lift a restriction early |
+| GET/POST | `/moderation/conversations/:id/notes` | Internal admin notes on a conversation |
 | GET | `/audit-logs` | Admin/staff only |
+| WS | `conversations` namespace | Socket.IO — JWT-authenticated handshake, join a conversation room, receive `newMessage`/`conversationUpdated`/`showingUpdated` pushes |
 
 ## Security notes
 
@@ -214,14 +259,22 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
   DI container exists, which is why `main.ts` loads dotenv as its very first import) and a
   Redis-backed limiter specifically for OTP send/confirm attempts (per-user and per-phone-number).
 - **Message moderation gate**: every message — composed in-app or received via inbound SMS —
-  runs through a deterministic contact-info detector (phone/email/URL regexes, an "at"/"dot"
-  normalization pass, and keyword rules for social/payment handles and off-platform requests)
-  *before* it is ever stored as delivered or relayed. A hit blocks the message (visible only to
-  its own sender, so they can edit and resend), records a `Violation`, and escalates: 1st hit →
-  educational warning, 2nd → stronger warning, 3rd → 24h messaging restriction, 4th+ → flagged
-  for moderator review. This is intentionally the *minimal* rule-based layer — Phase 3 adds full
-  word-to-digit normalization, pattern recognition, message-history analysis, an AI fallback, and
-  image analysis on top of the same gate.
+  runs through a layered pipeline before it is ever stored as delivered or relayed, each layer
+  only consulted if every earlier one found nothing: (1) deterministic regex/keyword rules
+  (phone/email/URL, "at"/"dot" wording, social/payment handles, off-platform phrasing); (2) full
+  text normalization (word-to-digit conversion, letter/number lookalike substitution, digit-
+  separator collapsing, bare unpunctuated 10-digit runs); (3) message-history analysis, which
+  re-runs the same detector over the sender's recent messages joined with the new one, catching
+  contact info deliberately split across several sends; (4) an optional AI fallback behind a
+  pluggable `AiModerationProvider` interface (mocked in this environment — no external AI call is
+  ever made without a real provider bound in). A hit blocks the message (visible only to its own
+  sender, so they can edit and resend), records a `Violation`, and escalates: 1st hit →
+  educational warning, 2nd → stronger warning, 3rd → 24h messaging restriction, 4th+ → flagged for
+  moderator review in the `/moderation` staff dashboard (queue, per-flag violation/restriction
+  history, review actions, manual restrict/lift, admin notes). Image analysis for message
+  attachments is intentionally **not** implemented yet — there is no file/attachment upload
+  system in this build (it needs cloud storage + signed URLs, a Phase 5 dependency), so there is
+  nothing yet for that layer to inspect.
 - **Tenant anonymity**: until a Phase 4 contact-release event, the tenant is shown to the
   landlord/property manager only as an anonymized `Tenant #1234` label (deterministic HMAC of
   their user ID, truncated to 4 digits) — in the conversation header, every message bubble, and
@@ -273,12 +326,18 @@ a load balancer/reverse proxy in front of both `api` and `dashboard`, and run
       rule-based moderation gate (regex + basic normalization + keyword rules) with escalating
       enforcement ships now; Twilio/Telnyx `SmsProvider` implementations are the remaining piece
       for a real carrier (currently mocked end-to-end).
-- [ ] **Phase 3 — Safety and moderation**: full layered contact-information detection (word-to-
-      digit normalization, letter/number substitution, pattern recognition, message-history
-      analysis, optional AI fallback, image analysis for attachments), moderator dashboard,
-      administrator override, fraud/abuse protections beyond the Phase 2 baseline.
-- [ ] **Phase 4 — Scheduling and applications**: showing scheduler + SMS reminders, application
-      status, lease status, contact-release rules.
+- [x] **Phase 3 — Safety and moderation**: full layered contact-information detection (word-to-
+      digit normalization, letter/number substitution, message-history analysis across split
+      messages, an optional AI-fallback provider seam), and a staff-only moderator dashboard
+      (flag queue, per-flag review, violation/restriction history, manual restrict/lift, admin
+      notes). **Not yet done**: image analysis for message attachments (no file/attachment upload
+      system exists in this build) and a real external AI moderation provider (the interface and
+      DI seam are real; only a mock is bound in, since no AI API key is configured here).
+- [ ] **Phase 4 — Scheduling and applications**: showing/tour scheduling landed early (proposal +
+      accept + cancel + complete, live in the conversation thread) along with real-time
+      WebSocket updates for new messages/status changes, both pulled forward from this phase.
+      **Still pending**: SMS reminders for upcoming showings, application status, lease status,
+      contact-release rules.
 - [ ] **Phase 5 — Production readiness**: BullMQ queue workers for all async work, retry/DLQ
       logic, monitoring, analytics dashboards, full test suite (webhook/idempotency/retry/
       obfuscation tests), security review.

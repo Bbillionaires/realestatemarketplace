@@ -18,6 +18,7 @@ import { SMS_PROVIDER } from '../sms/sms.constants';
 import { SmsProvider } from '../sms/interfaces/sms-provider.interface';
 import { MessageResponseDto } from './dto/message-response.dto';
 import { anonymizedNumber } from '../common/utils/anonymized-label.util';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 const STAFF_ROLES: Role[] = [Role.STAFF_MODERATOR, Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR];
 
@@ -40,6 +41,7 @@ export class MessagesService {
     private readonly moderationService: ModerationService,
     private readonly crypto: CryptoService,
     @Inject(SMS_PROVIDER) private readonly smsProvider: SmsProvider,
+    private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
   async compose(params: { conversationId: string; senderId: string; content: string }): Promise<ComposeResult> {
@@ -64,7 +66,11 @@ export class MessagesService {
     const recipientId = isSenderTenant ? conversation.landlordId : conversation.tenantId;
     const isFirstMessage = !conversation.lastMessageAt;
 
-    const moderation = this.moderationService.evaluate(params.content);
+    const moderation = await this.moderationService.evaluateWithHistory({
+      userId: params.senderId,
+      conversationId: conversation.id,
+      content: params.content,
+    });
 
     if (moderation.blocked) {
       const message = await this.prisma.message.create({
@@ -162,17 +168,22 @@ export class MessagesService {
       });
     }
 
+    const becameActive = conversation.status === ConversationStatus.NEW_INQUIRY && !isSenderTenant;
     await this.prisma.conversation.update({
       where: { id: conversation.id },
       data: {
         lastMessageAt: new Date(),
-        status: conversation.status === ConversationStatus.NEW_INQUIRY && !isSenderTenant
-          ? ConversationStatus.ACTIVE
-          : undefined,
+        status: becameActive ? ConversationStatus.ACTIVE : undefined,
       },
     });
 
-    return { message: MessageResponseDto.from(message, conversation.tenantId), blocked: false };
+    const responseDto = MessageResponseDto.from(message, conversation.tenantId);
+    this.realtimeGateway.emitNewMessage(conversation.id, responseDto);
+    if (becameActive) {
+      this.realtimeGateway.emitConversationUpdated(conversation.id, { status: ConversationStatus.ACTIVE });
+    }
+
+    return { message: responseDto, blocked: false };
   }
 
   /**
@@ -222,7 +233,11 @@ export class MessagesService {
     const recipientId = isSenderTenant ? conversation.landlordId : conversation.tenantId;
     const relayNumber = conversation.relayAssignments[0]?.relayNumber;
 
-    const moderation = this.moderationService.evaluate(params.body);
+    const moderation = await this.moderationService.evaluateWithHistory({
+      userId: params.senderId,
+      conversationId: conversation.id,
+      content: params.body,
+    });
 
     if (moderation.blocked) {
       const message = await this.prisma.message.create({
@@ -320,18 +335,22 @@ export class MessagesService {
       });
     }
 
+    const becameActiveInbound = conversation.status === ConversationStatus.NEW_INQUIRY && !isSenderTenant;
     await this.prisma.conversation.update({
       where: { id: conversation.id },
       data: {
         lastMessageAt: new Date(),
-        status:
-          conversation.status === ConversationStatus.NEW_INQUIRY && !isSenderTenant
-            ? ConversationStatus.ACTIVE
-            : undefined,
+        status: becameActiveInbound ? ConversationStatus.ACTIVE : undefined,
       },
     });
 
-    return { message: MessageResponseDto.from(message, conversation.tenantId), blocked: false };
+    const inboundResponseDto = MessageResponseDto.from(message, conversation.tenantId);
+    this.realtimeGateway.emitNewMessage(conversation.id, inboundResponseDto);
+    if (becameActiveInbound) {
+      this.realtimeGateway.emitConversationUpdated(conversation.id, { status: ConversationStatus.ACTIVE });
+    }
+
+    return { message: inboundResponseDto, blocked: false };
   }
 
   async listForConversation(actor: AuthenticatedUser, conversationId: string): Promise<MessageResponseDto[]> {

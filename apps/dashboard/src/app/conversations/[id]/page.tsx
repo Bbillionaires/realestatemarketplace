@@ -3,14 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, ConversationSummary, MessageSummary } from '../../../lib/api';
+import { api, ConversationSummary, MessageSummary, ShowingSummary } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth-context';
 import { useCurrentUser } from '../../../lib/use-current-user';
+import { useConversationSocket } from '../../../lib/use-conversation-socket';
 import { formatDateTime } from '../../../lib/format';
 import { theme } from '../../../lib/theme';
 import { NavBar } from '../../../components/NavBar';
+import { ShowingPanel } from '../../../components/ShowingPanel';
 
-const POLL_INTERVAL_MS = 5000;
+// Real-time updates arrive over the WebSocket (see useConversationSocket);
+// this is just a low-frequency safety net in case a socket silently drops.
+const FALLBACK_POLL_INTERVAL_MS = 30_000;
 
 export default function ConversationThreadPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +24,7 @@ export default function ConversationThreadPage() {
 
   const [conversation, setConversation] = useState<ConversationSummary | null>(null);
   const [messages, setMessages] = useState<MessageSummary[]>([]);
+  const [showing, setShowing] = useState<ShowingSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,12 +36,14 @@ export default function ConversationThreadPage() {
 
   const refresh = useCallback(async () => {
     if (!accessToken) return;
-    const [conv, msgs] = await Promise.all([
+    const [conv, msgs, showings] = await Promise.all([
       api.getConversation(accessToken, id),
       api.listMessages(accessToken, id),
+      api.listShowings(accessToken, id),
     ]);
     setConversation(conv);
     setMessages(msgs);
+    setShowing(showings[0] ?? null);
   }, [accessToken, id]);
 
   useEffect(() => {
@@ -51,13 +58,43 @@ export default function ConversationThreadPage() {
 
     const interval = setInterval(() => {
       refresh().catch(() => undefined);
-    }, POLL_INTERVAL_MS);
+    }, FALLBACK_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [accessToken, authLoading, refresh, router]);
+
+  useConversationSocket(
+    id,
+    accessToken,
+    (incoming) => {
+      setMessages((prev) => (prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]));
+    },
+    (patch) => {
+      setConversation((prev) => (prev && prev.id === patch.id ? { ...prev, status: patch.status } : prev));
+    },
+    (updatedShowing) => setShowing(updatedShowing),
+  );
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
+
+  async function handleProposeShowing(startTimeIso: string) {
+    if (!accessToken) return;
+    const updated = await api.proposeShowing(accessToken, id, startTimeIso);
+    setShowing(updated);
+  }
+
+  async function handleAcceptSlot(showingId: string, slotId: string) {
+    if (!accessToken) return;
+    const updated = await api.acceptShowingSlot(accessToken, id, showingId, slotId);
+    setShowing(updated);
+  }
+
+  async function handleCancelShowing(showingId: string) {
+    if (!accessToken) return;
+    const updated = await api.cancelShowing(accessToken, id, showingId);
+    setShowing(updated);
+  }
 
   async function submitReply() {
     if (!accessToken || reply.trim().length === 0) return;
@@ -173,6 +210,14 @@ export default function ConversationThreadPage() {
           })}
           <div ref={bottomRef} />
         </div>
+
+        <ShowingPanel
+          showing={showing}
+          currentUserId={user?.id}
+          onPropose={handleProposeShowing}
+          onAcceptSlot={handleAcceptSlot}
+          onCancel={handleCancelShowing}
+        />
 
         {guidance && (
           <p style={{ background: theme.warningBg, color: theme.warningText, padding: 10, borderRadius: 8, fontSize: 13, marginTop: 12 }}>

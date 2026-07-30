@@ -3,11 +3,16 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../lib/auth-context';
+import { useCurrentUser } from '../lib/use-current-user';
 import { theme } from '../lib/theme';
+
+const STAFF_ROLES = ['STAFF_MODERATOR', 'ADMINISTRATOR', 'SUPER_ADMINISTRATOR'];
 
 export function NavBar() {
   const { setTokens } = useAuth();
+  const { user } = useCurrentUser();
   const router = useRouter();
+  const isStaff = !!user && STAFF_ROLES.includes(user.role);
 
   return (
     <header
@@ -30,6 +35,11 @@ export function NavBar() {
         <Link href="/inbox" style={{ color: theme.text, textDecoration: 'none', fontSize: 14 }}>
           Inbox
         </Link>
+        {isStaff && (
+          <Link href="/moderation" style={{ color: theme.text, textDecoration: 'none', fontSize: 14 }}>
+            Moderation
+          </Link>
+        )}
         <button
           onClick={() => {
             setTokens(null);

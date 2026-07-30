@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { ConversationStatus } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditLog } from '../common/decorators/audit-log.decorator';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
@@ -16,8 +17,12 @@ export class ConversationsController {
   }
 
   @Get()
-  findAll(@CurrentUser() user: AuthenticatedUser) {
-    return this.conversationsService.findAllForActor(user);
+  findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('propertyId') propertyId?: string,
+    @Query('status') status?: ConversationStatus,
+  ) {
+    return this.conversationsService.findAllForActor(user, { propertyId, status });
   }
 
   @Get(':id')

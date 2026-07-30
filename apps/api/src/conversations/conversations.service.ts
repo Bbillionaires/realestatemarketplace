@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ConversationParticipantRole, ConversationStatus, Role } from '@prisma/client';
+import { ConversationParticipantRole, ConversationStatus, MessageStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { MessagesService } from '../messages/messages.service';
@@ -16,9 +16,16 @@ const TENANT_ROLES: Role[] = [Role.PROSPECTIVE_TENANT, Role.CURRENT_TENANT];
 
 const CONVERSATION_INCLUDE = {
   property: { select: { id: true, title: true, addressLine1: true, city: true, state: true } },
+  unit: { select: { unitLabel: true } },
   tenant: { include: { profile: true } },
   landlord: { include: { profile: true } },
   relayAssignments: { include: { relayNumber: true } },
+  messages: {
+    where: { status: { not: MessageStatus.BLOCKED } },
+    orderBy: { createdAt: 'desc' as const },
+    take: 1,
+    select: { senderId: true, originalContent: true },
+  },
 } as const;
 
 @Injectable()
@@ -97,7 +104,7 @@ export class ConversationsService {
     });
 
     return {
-      conversation: ConversationResponseDto.from(refreshed),
+      conversation: ConversationResponseDto.from(refreshed, actor.id),
       message: messageResult.message,
       delivered: !messageResult.blocked,
       guidance: messageResult.blocked
@@ -106,17 +113,24 @@ export class ConversationsService {
     };
   }
 
-  async findAllForActor(actor: AuthenticatedUser): Promise<ConversationResponseDto[]> {
-    const where = STAFF_ROLES.includes(actor.role)
+  async findAllForActor(
+    actor: AuthenticatedUser,
+    filters: { propertyId?: string; status?: ConversationStatus } = {},
+  ): Promise<ConversationResponseDto[]> {
+    const scope = STAFF_ROLES.includes(actor.role)
       ? {}
       : { OR: [{ tenantId: actor.id }, { participants: { some: { userId: actor.id, leftAt: null } } }] };
 
     const conversations = await this.prisma.conversation.findMany({
-      where,
+      where: {
+        ...scope,
+        propertyId: filters.propertyId ?? undefined,
+        status: filters.status ?? undefined,
+      },
       include: CONVERSATION_INCLUDE,
       orderBy: { lastMessageAt: 'desc' },
     });
-    return conversations.map((c) => ConversationResponseDto.from(c));
+    return conversations.map((c) => ConversationResponseDto.from(c, actor.id));
   }
 
   async findOneForActor(actor: AuthenticatedUser, id: string): Promise<ConversationResponseDto> {
@@ -128,7 +142,7 @@ export class ConversationsService {
       throw new NotFoundException('Conversation not found');
     }
     await this.assertParticipant(actor, conversation.id, conversation.tenantId, conversation.landlordId);
-    return ConversationResponseDto.from(conversation);
+    return ConversationResponseDto.from(conversation, actor.id);
   }
 
   async assertParticipant(

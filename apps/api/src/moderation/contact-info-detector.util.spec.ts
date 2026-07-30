@@ -71,4 +71,41 @@ describe('detectContactInfo', () => {
     expect(result.sanitizedContent).not.toContain('904-555-1234');
     expect(result.sanitizedContent).not.toContain('jane@example.com');
   });
+
+  describe('Phase 3: full normalization', () => {
+    it('blocks a phone number spelled out in words', () => {
+      const result = detectContactInfo('my number is nine zero four five five five one two three four');
+      expect(result.blocked).toBe(true);
+      expect(result.matches.some((m) => m.violationType === ViolationType.PHONE_NUMBER)).toBe(true);
+    });
+
+    it('blocks a phone number disguised with letter/number lookalikes ("O" for 0)', () => {
+      const result = detectContactInfo('reach me at 9O4-555-1234 anytime');
+      expect(result.blocked).toBe(true);
+      expect(result.matches.some((m) => m.violationType === ViolationType.PHONE_NUMBER)).toBe(true);
+    });
+
+    it('blocks a bare, unpunctuated 10-digit phone number', () => {
+      const result = detectContactInfo('you can text 9045551234 whenever');
+      expect(result.blocked).toBe(true);
+      expect(result.matches.some((m) => m.violationType === ViolationType.PHONE_NUMBER)).toBe(true);
+    });
+
+    it('does not flag ordinary counts/measurements as disguised phone numbers', () => {
+      const safe = [
+        'It is a 3 bedroom 2 bathroom home with 2 parking spots.',
+        'I have four kids and two dogs, is that a problem for the lease?',
+        'Rent is due on the 1st, and the unit sleeps up to 4 occupants.',
+        'The property is 2100 square feet with a two car garage.',
+      ];
+      for (const message of safe) {
+        expect(detectContactInfo(message).blocked).toBe(false);
+      }
+    });
+
+    it('does not mistake casual words like "lol" or "cool" for lookalike digits', () => {
+      const result = detectContactInfo('lol that sounds cool, what time works?');
+      expect(result.blocked).toBe(false);
+    });
+  });
 });

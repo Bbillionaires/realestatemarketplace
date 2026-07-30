@@ -219,4 +219,34 @@ describe('Conversations + Messages (e2e)', () => {
       .send({ content: 'This is a perfectly clean message' });
     expect(restricted.status).toBe(403);
   });
+
+  it('blocks a phone number spelled out and split across two separate messages', async () => {
+    const { tenant, propertyId } = await setupLandlordTenantProperty();
+
+    const start = await request(app.getHttpServer())
+      .post('/api/conversations')
+      .set('Authorization', `Bearer ${tenant.accessToken}`)
+      .send({ propertyId, message: 'Hi, interested in this unit' });
+    const conversationId = start.body.conversation.id;
+
+    const first = await request(app.getHttpServer())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${tenant.accessToken}`)
+      .send({ content: 'nine zero four five five five' });
+    expect(first.body.delivered).toBe(true);
+
+    const second = await request(app.getHttpServer())
+      .post(`/api/conversations/${conversationId}/messages`)
+      .set('Authorization', `Bearer ${tenant.accessToken}`)
+      .send({ content: 'one two three four thanks' });
+    expect(second.status).toBe(201);
+    expect(second.body.delivered).toBe(false);
+
+    const violations = await prisma.violation.findMany({
+      where: { userId: tenant.userId },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(violations.length).toBe(1);
+    expect(violations[0].detectionMethod).toBe('HISTORY_ANALYSIS');
+  });
 });
