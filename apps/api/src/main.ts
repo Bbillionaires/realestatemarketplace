@@ -27,7 +27,10 @@ async function bootstrap() {
   );
 
   const port = process.env.PORT ?? 3001;
-  await app.listen(port);
+  // Explicit 0.0.0.0 bind: some container platforms (Railway included) proxy
+  // to the container over an interface that isn't reached by Node's default
+  // listen() binding, which otherwise looks like the app never came up.
+  await app.listen(port, '0.0.0.0');
   logger.log(`API listening on port ${port}`);
 }
 
