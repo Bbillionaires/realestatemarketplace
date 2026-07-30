@@ -93,6 +93,98 @@ describe('RBAC / privilege escalation protection (e2e)', () => {
     expect(restore.body.isActive).toBe(true);
   });
 
+  it('forbids a moderator from suspending anyone until an admin grants the permission, and an admin can revoke it again', async () => {
+    const adminToken = await registerAs('ADMINISTRATOR', 'admin4@example.com');
+    const modToken = await registerAs('STAFF_MODERATOR', 'mod4@example.com');
+    await registerAs('PROSPECTIVE_TENANT', 'target5@example.com');
+    const moderator = await prisma.user.findUniqueOrThrow({ where: { email: 'mod4@example.com' } });
+    const target = await prisma.user.findUniqueOrThrow({ where: { email: 'target5@example.com' } });
+    void modToken;
+
+    const deniedSuspend = await request(app.getHttpServer())
+      .patch(`/api/users/${target.id}/suspend`)
+      .set('Authorization', `Bearer ${modToken}`);
+    expect(deniedSuspend.status).toBe(403);
+
+    const nonAdminGrant = await request(app.getHttpServer())
+      .patch(`/api/users/${moderator.id}/suspend-permission`)
+      .set('Authorization', `Bearer ${modToken}`)
+      .send({ enabled: true });
+    expect(nonAdminGrant.status).toBe(403);
+
+    const grant = await request(app.getHttpServer())
+      .patch(`/api/users/${moderator.id}/suspend-permission`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ enabled: true });
+    expect(grant.status).toBe(200);
+    expect(grant.body.canSuspendUsers).toBe(true);
+
+    const allowedSuspend = await request(app.getHttpServer())
+      .patch(`/api/users/${target.id}/suspend`)
+      .set('Authorization', `Bearer ${modToken}`);
+    expect(allowedSuspend.status).toBe(200);
+    expect(allowedSuspend.body.isActive).toBe(false);
+
+    const modRestore = await request(app.getHttpServer())
+      .patch(`/api/users/${target.id}/restore`)
+      .set('Authorization', `Bearer ${modToken}`);
+    expect(modRestore.status).toBe(200);
+    expect(modRestore.body.isActive).toBe(true);
+
+    // An admin can always reverse a moderator's action, delegated permission or not.
+    const adminSuspend = await request(app.getHttpServer())
+      .patch(`/api/users/${target.id}/suspend`)
+      .set('Authorization', `Bearer ${modToken}`);
+    expect(adminSuspend.status).toBe(200);
+    const adminRestore = await request(app.getHttpServer())
+      .patch(`/api/users/${target.id}/restore`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(adminRestore.status).toBe(200);
+    expect(adminRestore.body.isActive).toBe(true);
+
+    const revoke = await request(app.getHttpServer())
+      .patch(`/api/users/${moderator.id}/suspend-permission`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ enabled: false });
+    expect(revoke.status).toBe(200);
+    expect(revoke.body.canSuspendUsers).toBe(false);
+
+    const deniedAgain = await request(app.getHttpServer())
+      .patch(`/api/users/${target.id}/suspend`)
+      .set('Authorization', `Bearer ${modToken}`);
+    expect(deniedAgain.status).toBe(403);
+  });
+
+  it('never lets a permitted moderator suspend another moderator or an admin', async () => {
+    const adminToken = await registerAs('ADMINISTRATOR', 'admin5@example.com');
+    const modToken = await registerAs('STAFF_MODERATOR', 'mod5@example.com');
+    await registerAs('STAFF_MODERATOR', 'mod5b@example.com');
+    const moderator = await prisma.user.findUniqueOrThrow({ where: { email: 'mod5@example.com' } });
+    const otherModerator = await prisma.user.findUniqueOrThrow({ where: { email: 'mod5b@example.com' } });
+
+    await request(app.getHttpServer())
+      .patch(`/api/users/${moderator.id}/suspend-permission`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ enabled: true });
+
+    const res = await request(app.getHttpServer())
+      .patch(`/api/users/${otherModerator.id}/suspend`)
+      .set('Authorization', `Bearer ${modToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects granting the suspend permission to a non-moderator', async () => {
+    const adminToken = await registerAs('ADMINISTRATOR', 'admin6@example.com');
+    await registerAs('PROSPECTIVE_TENANT', 'target6@example.com');
+    const target = await prisma.user.findUniqueOrThrow({ where: { email: 'target6@example.com' } });
+
+    const res = await request(app.getHttpServer())
+      .patch(`/api/users/${target.id}/suspend-permission`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ enabled: true });
+    expect(res.status).toBe(400);
+  });
+
   it('every mutating action is captured in the audit log', async () => {
     const adminToken = await registerAs('ADMINISTRATOR', 'admin3@example.com');
     await registerAs('PROSPECTIVE_TENANT', 'target4@example.com');

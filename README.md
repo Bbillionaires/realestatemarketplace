@@ -61,7 +61,7 @@ apps/
     src/app/properties/          Browse + detail pages (photo, tabs, sticky "Message Landlord" bar)
     src/app/inbox/                Conversation list — property/status filters, unread indicator, unit label, last-message preview
     src/app/conversations/[id]/   Message thread + reply box, showing panel, live Socket.IO updates (polling only as a fallback)
-    src/app/moderation/           Staff-only moderator dashboard: flag queue, review, violation/restriction history, admin notes
+    src/app/moderation/           Staff-only moderator dashboard: flag queue, review, violation/restriction history, admin notes, account suspend/restore, and an admin-only per-moderator suspend-permission toggle
     src/components/ShowingPanel.tsx  Propose/accept/cancel a showing time slot from the thread
     src/lib/use-conversation-socket.ts  Socket.IO client hook used by the conversation thread
 docker/
@@ -155,7 +155,11 @@ and points at a separate `_test` database so `npm run test:e2e` never touches de
 - **Auth**: registration (role allow-listing), login, refresh-token rotation, reuse-detection
   (a replayed refresh token revokes its whole token family), suspended-user lockout.
 - **RBAC**: route-level role guards; an `ADMINISTRATOR` cannot escalate anyone to
-  `ADMINISTRATOR`/`SUPER_ADMINISTRATOR` (only a `SUPER_ADMINISTRATOR` can); suspend/restore.
+  `ADMINISTRATOR`/`SUPER_ADMINISTRATOR` (only a `SUPER_ADMINISTRATOR` can); suspend/restore; a
+  `STAFF_MODERATOR` is forbidden from suspending anyone until an admin grants `canSuspendUsers`
+  (and can never suspend another moderator or an admin even once granted), an admin can revoke
+  the grant again, and an admin can always reverse any suspend/restore regardless of who did it
+  (`test/rbac.e2e-spec.ts`).
 - **Phone privacy**: OTP send + confirm through the mock SMS provider; explicit assertions
   that `encryptedNumber`, `numberHash`, and the raw number never appear in any API response
   (see `test/phone-verification.e2e-spec.ts`).
@@ -203,6 +207,11 @@ history-split case added to `test/conversations.e2e-spec.ts`) —
   it → next violation escalates straight to `MODERATOR_REVIEW` → a `ModerationFlag` appears in the
   queue); reviewing a flag (clear/keep-under-review/confirm-block); imposing and lifting a
   restriction by hand; adding and listing admin notes on a conversation.
+- **Delegated account suspension**: a `STAFF_MODERATOR` cannot suspend/restore any account until
+  an admin grants `canSuspendUsers` for that specific moderator, can never touch another
+  moderator's or admin's account even once granted, and loses the ability the moment an admin
+  revokes it — while an admin can suspend/restore any account (and reverse a moderator's action)
+  unconditionally, with every grant/revoke/suspend/restore recorded in the audit log.
 
 ## API surface
 
@@ -218,7 +227,8 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | GET/PATCH | `/users/me` | Own profile |
 | GET | `/users`, `/users/:id` | Admin/staff only |
 | PATCH | `/users/:id/role` | Admin+ (privilege-escalation guarded) |
-| PATCH | `/users/:id/suspend`, `/restore` | Admin+ |
+| PATCH | `/users/:id/suspend`, `/restore` | Admin+ unconditionally; a STAFF_MODERATOR only if granted `canSuspendUsers`, and never against another moderator/admin |
+| PATCH | `/users/:id/suspend-permission` | Admin+ only — grants/revokes a specific moderator's `canSuspendUsers` |
 | GET/POST | `/phone` | List / start OTP verification |
 | POST | `/phone/confirm-verification` | |
 | GET/POST | `/properties`, `/properties/:id` | Role-shaped response (see above) |
@@ -287,7 +297,11 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
   instead of guessing.
 - **Least privilege**: an `ADMINISTRATOR` cannot grant `ADMINISTRATOR`/`SUPER_ADMINISTRATOR` —
   only a `SUPER_ADMINISTRATOR` can, preventing a single compromised admin account from minting
-  more admins.
+  more admins. Account suspension follows the same pattern one level down: a `STAFF_MODERATOR`
+  has no suspend/restore ability by default, only gains it per-moderator when an admin explicitly
+  grants `canSuspendUsers` (toggleable from the moderator-permissions panel in `/moderation`), can
+  only ever act on non-staff accounts even when granted, and an admin can revoke the grant or
+  reverse any of their actions at any time.
 - **Audit logging**: every mutating action (role changes, suspensions, property edits, manager
   assignment, phone verification) writes an `AuditLog` row with actor, IP, and user agent.
 - **Known Phase 1 simplification to revisit in the Phase 5 security review**: the dashboard

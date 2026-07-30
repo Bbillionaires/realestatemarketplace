@@ -166,7 +166,13 @@ export class AuthService {
   async getAuthenticatedUser(userId: string): Promise<AuthenticatedUser | null> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) return null;
-    return { id: user.id, email: user.email, role: user.role, isActive: user.isActive };
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      canSuspendUsers: user.canSuspendUsers,
+    };
   }
 
   private async issueTokenPair(

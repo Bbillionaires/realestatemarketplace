@@ -11,6 +11,8 @@ export class UserResponseDto {
   email!: string;
   role!: Role;
   isActive!: boolean;
+  /** Only meaningful for STAFF_MODERATOR — see User.canSuspendUsers. */
+  canSuspendUsers!: boolean;
   createdAt!: Date;
   lastLoginAt!: Date | null;
   profile!: {
@@ -26,6 +28,7 @@ export class UserResponseDto {
     email: string;
     role: Role;
     isActive: boolean;
+    canSuspendUsers: boolean;
     createdAt: Date;
     lastLoginAt: Date | null;
     profile?: {
@@ -41,6 +44,7 @@ export class UserResponseDto {
     dto.email = user.email;
     dto.role = user.role;
     dto.isActive = user.isActive;
+    dto.canSuspendUsers = user.canSuspendUsers;
     dto.createdAt = user.createdAt;
     dto.lastLoginAt = user.lastLoginAt;
     dto.profile = user.profile

@@ -8,6 +8,7 @@ import { AuthenticatedUser } from '../common/interfaces/authenticated-user.inter
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangeRoleDto } from './dto/change-role.dto';
+import { SetSuspendPermissionDto } from './dto/set-suspend-permission.dto';
 
 @Controller('users')
 export class UsersController {
@@ -56,20 +57,35 @@ export class UsersController {
   }
 
   @Patch(':id/suspend')
-  @Roles(Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR)
+  @Roles(Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR, Role.STAFF_MODERATOR)
   @AuditLog('user.suspend', 'User')
   suspend(@CurrentUser() actor: AuthenticatedUser, @Param('id') id: string, @Req() req: Request) {
-    return this.usersService.setActive(actor.id, id, false, {
+    return this.usersService.setActive(actor, id, false, {
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
   }
 
   @Patch(':id/restore')
-  @Roles(Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR)
+  @Roles(Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR, Role.STAFF_MODERATOR)
   @AuditLog('user.restore', 'User')
   restore(@CurrentUser() actor: AuthenticatedUser, @Param('id') id: string, @Req() req: Request) {
-    return this.usersService.setActive(actor.id, id, true, {
+    return this.usersService.setActive(actor, id, true, {
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Patch(':id/suspend-permission')
+  @Roles(Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR)
+  @AuditLog('user.suspend_permission_change', 'User')
+  setSuspendPermission(
+    @CurrentUser() actor: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SetSuspendPermissionDto,
+    @Req() req: Request,
+  ) {
+    return this.usersService.setSuspendPermission(actor, id, dto.enabled, {
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });

@@ -33,6 +33,7 @@ export class ModerationFlagResponseDto {
     email: string;
     displayName: string;
     role: string;
+    isActive: boolean;
   } | null;
 
   static from(flag: {
@@ -50,7 +51,13 @@ export class ModerationFlagResponseDto {
       originalContent: string;
       sanitizedContent: string | null;
       createdAt: Date;
-      sender?: { id: string; email: string; role: string; profile?: { displayName: string } | null } | null;
+      sender?: {
+        id: string;
+        email: string;
+        role: string;
+        isActive: boolean;
+        profile?: { displayName: string } | null;
+      } | null;
     };
     conversation: { id: string; property: { title: string } };
   }): ModerationFlagResponseDto {
@@ -77,6 +84,7 @@ export class ModerationFlagResponseDto {
           email: flag.message.sender.email,
           displayName: flag.message.sender.profile?.displayName ?? flag.message.sender.email,
           role: flag.message.sender.role,
+          isActive: flag.message.sender.isActive,
         }
       : null;
     return dto;

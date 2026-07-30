@@ -64,6 +64,18 @@ export interface CurrentUser {
   email: string;
   role: string;
   isActive: boolean;
+  canSuspendUsers: boolean;
+  profile: { displayName: string } | null;
+}
+
+export interface UserSummary {
+  id: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  canSuspendUsers: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
   profile: { displayName: string } | null;
 }
 
@@ -133,7 +145,7 @@ export interface ModerationFlagSummary {
   decision: string | null;
   message: { id: string; originalContent: string; sanitizedContent: string | null; createdAt: string };
   conversation: { id: string; propertyTitle: string };
-  flaggedUser: { id: string; email: string; displayName: string; role: string } | null;
+  flaggedUser: { id: string; email: string; displayName: string; role: string; isActive: boolean } | null;
 }
 
 export interface ViolationSummary {
@@ -261,6 +273,18 @@ export const api = {
     request<AdminNoteSummary>(
       `/moderation/conversations/${conversationId}/notes`,
       { method: 'POST', body: JSON.stringify({ note }) },
+      accessToken,
+    ),
+  listUsers: (accessToken: string, role?: string) =>
+    request<UserSummary[]>(`/users${role ? `?role=${role}` : ''}`, {}, accessToken),
+  suspendUser: (accessToken: string, userId: string) =>
+    request<UserSummary>(`/users/${userId}/suspend`, { method: 'PATCH' }, accessToken),
+  restoreUser: (accessToken: string, userId: string) =>
+    request<UserSummary>(`/users/${userId}/restore`, { method: 'PATCH' }, accessToken),
+  setSuspendPermission: (accessToken: string, userId: string, enabled: boolean) =>
+    request<UserSummary>(
+      `/users/${userId}/suspend-permission`,
+      { method: 'PATCH', body: JSON.stringify({ enabled }) },
       accessToken,
     ),
 };

@@ -7,6 +7,7 @@ import {
   AdminNoteSummary,
   ModerationFlagSummary,
   RestrictionSummary,
+  UserSummary,
   ViolationSummary,
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth-context';
@@ -16,6 +17,7 @@ import { theme } from '../../lib/theme';
 import { NavBar } from '../../components/NavBar';
 
 const STAFF_ROLES = ['STAFF_MODERATOR', 'ADMINISTRATOR', 'SUPER_ADMINISTRATOR'];
+const ADMIN_ROLES = ['ADMINISTRATOR', 'SUPER_ADMINISTRATOR'];
 
 const STATUS_LABELS: Record<string, string> = {
   FLAGGED: 'Flagged',
@@ -59,6 +61,10 @@ export default function ModerationPage() {
   const [newNote, setNewNote] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const [moderators, setModerators] = useState<UserSummary[]>([]);
+  const isAdmin = !!user && ADMIN_ROLES.includes(user.role);
+  const canSuspendAccounts = isAdmin || !!user?.canSuspendUsers;
+
   useEffect(() => {
     if (authLoading) return;
     if (!accessToken) {
@@ -87,6 +93,16 @@ export default function ModerationPage() {
     loadFlags();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, statusFilter]);
+
+  function loadModerators() {
+    if (!accessToken || !isAdmin) return;
+    api.listUsers(accessToken, 'STAFF_MODERATOR').then(setModerators).catch(() => undefined);
+  }
+
+  useEffect(() => {
+    loadModerators();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, isAdmin]);
 
   const selectedFlag = flags.find((f) => f.id === selectedId) ?? null;
 
@@ -167,6 +183,53 @@ export default function ModerationPage() {
       setNewNote('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add note');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function suspendAccount() {
+    if (!accessToken || !selectedFlag?.flaggedUser) return;
+    setBusy(true);
+    try {
+      const updated = await api.suspendUser(accessToken, selectedFlag.flaggedUser.id);
+      setFlags((prev) =>
+        prev.map((f) =>
+          f.flaggedUser?.id === updated.id ? { ...f, flaggedUser: { ...f.flaggedUser!, isActive: updated.isActive } } : f,
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to suspend account');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function restoreAccount() {
+    if (!accessToken || !selectedFlag?.flaggedUser) return;
+    setBusy(true);
+    try {
+      const updated = await api.restoreUser(accessToken, selectedFlag.flaggedUser.id);
+      setFlags((prev) =>
+        prev.map((f) =>
+          f.flaggedUser?.id === updated.id ? { ...f, flaggedUser: { ...f.flaggedUser!, isActive: updated.isActive } } : f,
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to restore account');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleModeratorSuspendPermission(moderatorId: string, enabled: boolean) {
+    if (!accessToken) return;
+    setBusy(true);
+    try {
+      const updated = await api.setSuspendPermission(accessToken, moderatorId, enabled);
+      setModerators((prev) => prev.map((m) => (m.id === moderatorId ? updated : m)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update moderator permission');
     } finally {
       setBusy(false);
     }
@@ -265,9 +328,33 @@ export default function ModerationPage() {
                 <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 10, padding: 16 }}>
                   <strong style={{ fontSize: 14 }}>Flag detail</strong>
                   <p style={{ fontSize: 13, marginTop: 8, whiteSpace: 'pre-wrap' }}>{selectedFlag.message.originalContent}</p>
-                  <div style={{ fontSize: 12, color: theme.textMuted }}>
-                    From {selectedFlag.flaggedUser?.displayName} ({selectedFlag.flaggedUser?.email}) ·{' '}
-                    {selectedFlag.flagType} via {selectedFlag.detectionMethod}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <div style={{ fontSize: 12, color: theme.textMuted }}>
+                      From {selectedFlag.flaggedUser?.displayName} ({selectedFlag.flaggedUser?.email}) ·{' '}
+                      {selectedFlag.flagType} via {selectedFlag.detectionMethod}
+                      {selectedFlag.flaggedUser && !selectedFlag.flaggedUser.isActive && (
+                        <span style={{ color: theme.danger, fontWeight: 700 }}> · account suspended</span>
+                      )}
+                    </div>
+                    {canSuspendAccounts && selectedFlag.flaggedUser && (
+                      selectedFlag.flaggedUser.isActive ? (
+                        <button
+                          disabled={busy}
+                          onClick={suspendAccount}
+                          style={{ border: `1px solid ${theme.danger}`, background: 'white', color: theme.danger, borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                          Suspend account
+                        </button>
+                      ) : (
+                        <button
+                          disabled={busy}
+                          onClick={restoreAccount}
+                          style={{ border: `1px solid ${theme.border}`, background: 'white', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                          Restore account
+                        </button>
+                      )
+                    )}
                   </div>
                   {selectedFlag.decision && (
                     <div style={{ fontSize: 12, marginTop: 8, padding: 8, background: theme.bg, borderRadius: 6 }}>
@@ -416,6 +503,38 @@ export default function ModerationPage() {
                       Add
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {isAdmin && (
+              <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 10, padding: 16, marginTop: 14 }}>
+                <strong style={{ fontSize: 14 }}>Moderator permissions</strong>
+                <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 4 }}>
+                  Grant a moderator the ability to suspend/restore non-staff accounts themselves. You can revoke this
+                  at any time, and can always suspend or restore any account yourself regardless of this setting.
+                </p>
+                <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+                  {moderators.map((m) => (
+                    <label
+                      key={m.id}
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, cursor: 'pointer' }}
+                    >
+                      <span>{m.profile?.displayName ?? m.email} ({m.email})</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        Can suspend accounts
+                        <input
+                          type="checkbox"
+                          checked={m.canSuspendUsers}
+                          disabled={busy}
+                          onChange={(e) => toggleModeratorSuspendPermission(m.id, e.target.checked)}
+                        />
+                      </span>
+                    </label>
+                  ))}
+                  {moderators.length === 0 && (
+                    <span style={{ fontSize: 12, color: theme.textMuted }}>No moderator accounts yet.</span>
+                  )}
                 </div>
               </div>
             )}

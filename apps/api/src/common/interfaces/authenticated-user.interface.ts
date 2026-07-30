@@ -12,4 +12,6 @@ export interface AuthenticatedUser {
   email: string;
   role: Role;
   isActive: boolean;
+  /** Only meaningful for STAFF_MODERATOR — see User.canSuspendUsers. */
+  canSuspendUsers: boolean;
 }

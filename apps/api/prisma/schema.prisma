@@ -214,6 +214,10 @@ model User {
   passwordHash      String
   role              Role
   isActive          Boolean   @default(true)
+  // Per-moderator grant, set only by an ADMINISTRATOR/SUPER_ADMINISTRATOR:
+  // lets a STAFF_MODERATOR suspend/restore non-staff accounts themselves
+  // instead of escalating to an admin. Meaningless for any other role.
+  canSuspendUsers   Boolean   @default(false)
   twoFactorEnabled  Boolean   @default(false)
   twoFactorSecret   String?
   lastLoginAt       DateTime?

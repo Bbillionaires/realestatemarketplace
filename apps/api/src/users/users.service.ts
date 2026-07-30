@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -6,10 +7,12 @@ import {
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 
-const STAFF_ROLES: Role[] = [Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR];
+const ADMIN_ROLES: Role[] = [Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR];
+const STAFF_ROLES: Role[] = [Role.STAFF_MODERATOR, Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR];
 
 @Injectable()
 export class UsersService {
@@ -70,7 +73,7 @@ export class UsersService {
     newRole: Role,
     ctx: { ipAddress?: string; userAgent?: string },
   ): Promise<UserResponseDto> {
-    if (STAFF_ROLES.includes(newRole) && actor.role !== Role.SUPER_ADMINISTRATOR) {
+    if (ADMIN_ROLES.includes(newRole) && actor.role !== Role.SUPER_ADMINISTRATOR) {
       throw new ForbiddenException('Only a super administrator can grant administrator roles');
     }
 
@@ -98,12 +101,32 @@ export class UsersService {
     return UserResponseDto.from(updated);
   }
 
+  /**
+   * Administrators/super-administrators can always suspend or restore any
+   * account. A STAFF_MODERATOR may do the same, but only if an admin has
+   * granted them `canSuspendUsers` (see setSuspendPermission), and only
+   * against a non-staff account — a moderator can never suspend/restore
+   * another moderator or an admin, delegated permission or not.
+   */
   async setActive(
-    actorId: string,
+    actor: AuthenticatedUser,
     targetUserId: string,
     isActive: boolean,
     ctx: { ipAddress?: string; userAgent?: string },
   ): Promise<UserResponseDto> {
+    if (actor.role === Role.STAFF_MODERATOR) {
+      if (!actor.canSuspendUsers) {
+        throw new ForbiddenException('An administrator has not granted you permission to suspend accounts');
+      }
+      const target = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+      if (!target) {
+        throw new NotFoundException('User not found');
+      }
+      if (STAFF_ROLES.includes(target.role)) {
+        throw new ForbiddenException('Moderators cannot suspend or restore staff or admin accounts');
+      }
+    }
+
     const updated = await this.prisma.user.update({
       where: { id: targetUserId },
       data: { isActive },
@@ -111,12 +134,51 @@ export class UsersService {
     });
 
     await this.auditService.log({
-      actorId,
+      actorId: actor.id,
       action: isActive ? 'user.restore' : 'user.suspend',
       entityType: 'User',
       entityId: targetUserId,
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
+      metadata: actor.role === Role.STAFF_MODERATOR ? { delegatedModeratorAction: true } : undefined,
+    });
+
+    return UserResponseDto.from(updated);
+  }
+
+  /**
+   * Admin-only: grants or revokes a specific moderator's ability to
+   * suspend/restore accounts themselves (see setActive). Only meaningful
+   * for a STAFF_MODERATOR target.
+   */
+  async setSuspendPermission(
+    actor: AuthenticatedUser,
+    targetUserId: string,
+    enabled: boolean,
+    ctx: { ipAddress?: string; userAgent?: string },
+  ): Promise<UserResponseDto> {
+    const target = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!target) {
+      throw new NotFoundException('User not found');
+    }
+    if (target.role !== Role.STAFF_MODERATOR) {
+      throw new BadRequestException('The suspend-users permission only applies to staff moderators');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: { canSuspendUsers: enabled },
+      include: { profile: true },
+    });
+
+    await this.auditService.log({
+      actorId: actor.id,
+      action: 'user.suspend_permission_change',
+      entityType: 'User',
+      entityId: targetUserId,
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+      metadata: { enabled },
     });
 
     return UserResponseDto.from(updated);
