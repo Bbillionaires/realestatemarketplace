@@ -20,23 +20,27 @@ export function NavBar() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '12px 24px',
+        padding: '14px 24px',
         background: theme.card,
         borderBottom: `1px solid ${theme.border}`,
+        boxShadow: '0 1px 3px rgba(21, 34, 56, 0.04)',
       }}
     >
-      <Link href="/properties" style={{ fontWeight: 700, color: theme.primary, textDecoration: 'none' }}>
+      <Link
+        href="/properties"
+        style={{ fontWeight: 800, fontSize: 17, color: theme.primary, textDecoration: 'none', letterSpacing: '-0.01em' }}
+      >
         Affordable Home Match
       </Link>
-      <nav style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
-        <Link href="/properties" style={{ color: theme.text, textDecoration: 'none', fontSize: 14 }}>
+      <nav style={{ display: 'flex', gap: 22, alignItems: 'center' }}>
+        <Link href="/properties" style={{ color: theme.text, textDecoration: 'none', fontSize: 14, fontWeight: 500 }}>
           Properties
         </Link>
-        <Link href="/inbox" style={{ color: theme.text, textDecoration: 'none', fontSize: 14 }}>
+        <Link href="/inbox" style={{ color: theme.text, textDecoration: 'none', fontSize: 14, fontWeight: 500 }}>
           Inbox
         </Link>
         {isStaff && (
-          <Link href="/moderation" style={{ color: theme.text, textDecoration: 'none', fontSize: 14 }}>
+          <Link href="/moderation" style={{ color: theme.text, textDecoration: 'none', fontSize: 14, fontWeight: 500 }}>
             Moderation
           </Link>
         )}

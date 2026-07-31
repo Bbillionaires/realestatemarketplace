@@ -1,9 +1,28 @@
-export function PhotoPlaceholder({ height = 180 }: { height?: number }) {
+export function PhotoPlaceholder({
+  height = 180,
+  photoUrl,
+  radius = 8,
+}: {
+  height?: number;
+  photoUrl?: string | null;
+  radius?: number;
+}) {
+  if (photoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={photoUrl}
+        alt=""
+        style={{ height, width: '100%', objectFit: 'cover', borderRadius: radius, display: 'block' }}
+      />
+    );
+  }
+
   return (
     <div
       style={{
         height,
-        borderRadius: 8,
+        borderRadius: radius,
         background: 'linear-gradient(135deg, #dbe7f3 0%, #c3d6ea 100%)',
         display: 'flex',
         alignItems: 'center',

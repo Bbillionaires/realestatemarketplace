@@ -49,35 +49,72 @@ export default function PropertiesPage() {
   return (
     <main style={{ minHeight: '100vh', background: theme.bg }}>
       <NavBar />
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: 24 }}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by city, address, or property name"
+      <div
+        style={{
+          background: theme.card,
+          borderBottom: `1px solid ${theme.border}`,
+          padding: '20px 24px',
+        }}
+      >
+        <div style={{ maxWidth: 1000, margin: '0 auto', display: 'flex', gap: 10 }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <span
+              style={{
+                position: 'absolute',
+                left: 14,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: theme.textMuted,
+                fontSize: 15,
+              }}
+            >
+              ⌕
+            </span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by city, address, or property name"
+              style={{
+                width: '100%',
+                padding: '12px 14px 12px 36px',
+                borderRadius: 8,
+                border: `1px solid ${theme.border}`,
+                fontSize: 14,
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+          <button
             style={{
-              flex: 1,
-              padding: '10px 14px',
+              padding: '0 20px',
               borderRadius: 8,
-              border: `1px solid ${theme.border}`,
+              border: 'none',
+              background: theme.primary,
+              color: 'white',
+              fontWeight: 600,
               fontSize: 14,
+              cursor: 'pointer',
             }}
-          />
+          >
+            Search
+          </button>
         </div>
+      </div>
 
-        <h1 style={{ fontSize: 20, marginBottom: 4 }}>Rental Properties</h1>
-        <p style={{ color: theme.textMuted, marginTop: 0, marginBottom: 20 }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto', padding: 24 }}>
+        <h1 style={{ fontSize: 22, marginBottom: 4, color: theme.text }}>Rental Properties</h1>
+        <p style={{ color: theme.textMuted, marginTop: 0, marginBottom: 20, fontSize: 14 }}>
           {filtered.length} {filtered.length === 1 ? 'rental' : 'rentals'}
         </p>
 
         {error && <p style={{ color: theme.danger }}>{error}</p>}
 
-        <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+        <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
           {filtered.map((property) => (
             <PropertyCard key={property.id} property={property} />
           ))}
         </div>
-        {filtered.length === 0 && !error && <p>No properties match your search.</p>}
+        {filtered.length === 0 && !error && <p style={{ color: theme.textMuted }}>No properties match your search.</p>}
       </div>
     </main>
   );

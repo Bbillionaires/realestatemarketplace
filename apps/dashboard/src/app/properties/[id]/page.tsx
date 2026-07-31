@@ -95,21 +95,38 @@ export default function PropertyDetailPage() {
         </Link>
 
         <div style={{ marginTop: 12 }}>
-          <PhotoPlaceholder height={260} />
+          <PhotoPlaceholder height={300} photoUrl={property.photoUrl} radius={theme.radius} />
         </div>
 
-        <div style={{ marginTop: 16 }}>
-          <h1 style={{ fontSize: 22, margin: 0 }}>{property.title}</h1>
-          <p style={{ color: theme.textMuted, margin: '4px 0 12px' }}>
+        <div style={{ marginTop: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: 24, margin: 0, color: theme.text, letterSpacing: '-0.01em' }}>{property.title}</h1>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: property.isActive ? theme.success : theme.textMuted,
+                background: property.isActive ? theme.successBg : theme.bg,
+                padding: '5px 10px',
+                borderRadius: 999,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {property.isActive ? '● Available Now' : 'Not currently available'}
+            </span>
+          </div>
+          <p style={{ color: theme.textMuted, margin: '4px 0 12px', fontSize: 14 }}>
             {property.addressLine1}
             {property.addressLine2 ? `, ${property.addressLine2}` : ''}, {property.city}, {property.state}{' '}
             {property.zip}
           </p>
           <div style={{ display: 'flex', gap: 16, alignItems: 'baseline', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 26, fontWeight: 700 }}>{formatMoney(rentCents)}</span>
+            <span style={{ fontSize: 28, fontWeight: 800, color: theme.text, letterSpacing: '-0.02em' }}>
+              {formatMoney(rentCents)}
+            </span>
             {rentCents !== null && <span style={{ color: theme.textMuted, fontSize: 13 }}>/month + fees may apply</span>}
             {unit && (
-              <span style={{ color: theme.text, fontSize: 14 }}>
+              <span style={{ color: theme.text, fontSize: 14, fontWeight: 500 }}>
                 {unit.bedrooms ?? '—'} beds | {unit.bathrooms ?? '—'} baths
                 {unit.squareFeet ? ` | ${unit.squareFeet} sqft` : ''}
               </span>
@@ -117,7 +134,7 @@ export default function PropertyDetailPage() {
           </div>
         </div>
 
-        <div style={{ marginTop: 24, background: theme.card, borderRadius: 10, border: `1px solid ${theme.border}`, padding: 16 }}>
+        <div style={{ marginTop: 24, background: theme.card, borderRadius: theme.radius, border: `1px solid ${theme.border}`, boxShadow: theme.shadow, padding: 16 }}>
           <Tabs
             tabs={[
               {
@@ -150,18 +167,29 @@ export default function PropertyDetailPage() {
               {
                 label: 'Fees',
                 content: (
-                  <dl style={{ fontSize: 14, color: theme.text, display: 'grid', gridTemplateColumns: '160px 1fr', rowGap: 10 }}>
-                    <dt style={{ color: theme.textMuted }}>Monthly rent</dt>
-                    <dd style={{ margin: 0 }}>{formatMoney(rentCents)}</dd>
-                    <dt style={{ color: theme.textMuted }}>Security deposit</dt>
-                    <dd style={{ margin: 0 }}>{formatMoney(property.depositCents)}</dd>
-                    <dt style={{ color: theme.textMuted }}>Est. move-in total</dt>
-                    <dd style={{ margin: 0 }}>
-                      {rentCents !== null && property.depositCents !== null
-                        ? formatMoney(rentCents + property.depositCents)
-                        : 'Contact for pricing'}
-                    </dd>
-                  </dl>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: theme.text, marginBottom: 10 }}>Your Summary</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: theme.border, borderRadius: 10, overflow: 'hidden' }}>
+                      <div style={{ background: theme.bg, padding: '12px 16px', gridColumn: '1 / -1' }}>
+                        <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 700, letterSpacing: '0.03em' }}>MONTHLY RENT</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: theme.text, marginTop: 2 }}>{formatMoney(rentCents)}</div>
+                      </div>
+                      <div style={{ background: theme.bg, padding: '12px 16px' }}>
+                        <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 700, letterSpacing: '0.03em' }}>MOVE-IN FEES</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: theme.text, marginTop: 2 }}>
+                          {rentCents !== null && property.depositCents !== null
+                            ? formatMoney(rentCents + property.depositCents)
+                            : 'Contact for pricing'}
+                        </div>
+                      </div>
+                      <div style={{ background: theme.bg, padding: '12px 16px' }}>
+                        <div style={{ fontSize: 11, color: theme.textMuted, fontWeight: 700, letterSpacing: '0.03em' }}>SECURITY DEPOSIT</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: theme.text, marginTop: 2 }}>
+                          {formatMoney(property.depositCents)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 ),
               },
               {
