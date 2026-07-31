@@ -1,4 +1,4 @@
-# Landlord/Tenant Relay Messaging Platform
+# Affordable Home Match
 
 A property marketplace communication system that lets prospective/current tenants and
 landlords/property managers text each other at native-SMS speed while every message is

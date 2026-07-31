@@ -26,7 +26,7 @@ export function NavBar() {
       }}
     >
       <Link href="/properties" style={{ fontWeight: 700, color: theme.primary, textDecoration: 'none' }}>
-        Relay Messaging Platform
+        Affordable Home Match
       </Link>
       <nav style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
         <Link href="/properties" style={{ color: theme.text, textDecoration: 'none', fontSize: 14 }}>

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { AuthProvider } from '../lib/auth-context';
 
 export const metadata: Metadata = {
-  title: 'Relay Messaging Platform',
+  title: 'Affordable Home Match',
   description: 'Landlord/tenant relay messaging dashboard',
 };
 
