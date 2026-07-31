@@ -9,8 +9,7 @@ export default function HomePage() {
           Affordable Home Match
         </h1>
         <p style={{ color: theme.textMuted, fontSize: 15, lineHeight: 1.6 }}>
-          Landlords and tenants communicate through the platform relay — never sharing real phone
-          numbers directly.
+          Matching Qualified Tenants with Affordable Homes Nationwide
         </p>
         <div style={{ marginTop: 24, display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           <Link
