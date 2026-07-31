@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, PropertySummary, UpdatePropertyPayload } from '../../../lib/api';
+import { api, PropertySummary, UpdatePropertyPayload, WaitlistEntry } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth-context';
 import { useCurrentUser } from '../../../lib/use-current-user';
 import { formatMoney, primaryUnit } from '../../../lib/format';
@@ -15,6 +15,7 @@ import { NavBar } from '../../../components/NavBar';
 const TENANT_ROLES = ['PROSPECTIVE_TENANT', 'CURRENT_TENANT'];
 
 const LISTING_OPTIONS: { flag: keyof UpdatePropertyPayload; label: string; hint: string }[] = [
+  { flag: 'acceptsSection8Vouchers', label: 'Accepts Section 8 Vouchers', hint: 'Housing Choice Voucher tenants are welcome to apply.' },
   { flag: 'rentToOwnAvailable', label: 'Rent-to-Own', hint: 'Tenant may apply rent toward eventual purchase.' },
   { flag: 'leaseToOwnAvailable', label: 'Lease-to-Own', hint: 'Lease includes an option to buy at term end.' },
   { flag: 'sellerFinancingAvailable', label: 'Seller Financing', hint: 'You would finance the purchase directly for a buyer.' },
@@ -45,6 +46,12 @@ export default function PropertyDetailPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
+  const [myWaitlistEntry, setMyWaitlistEntry] = useState<WaitlistEntry | null>(null);
+  const [waitlistNote, setWaitlistNote] = useState('');
+  const [waitlistBusy, setWaitlistBusy] = useState(false);
+  const [waitlistError, setWaitlistError] = useState<string | null>(null);
+  const [waitlistQueue, setWaitlistQueue] = useState<WaitlistEntry[] | null>(null);
+
   useEffect(() => {
     if (authLoading) return;
     if (!accessToken) {
@@ -58,9 +65,56 @@ export default function PropertyDetailPage() {
       .finally(() => setLoading(false));
   }, [accessToken, authLoading, id, router]);
 
+  useEffect(() => {
+    if (!accessToken || !user) return;
+    if (TENANT_ROLES.includes(user.role)) {
+      api
+        .listMyWaitlists(accessToken)
+        .then((entries) => setMyWaitlistEntry(entries.find((e) => e.propertyId === id) ?? null))
+        .catch(() => undefined);
+    }
+  }, [accessToken, user, id]);
+
+  useEffect(() => {
+    if (!accessToken || !property || property.ownerId === undefined) return;
+    api
+      .listPropertyWaitlist(accessToken, property.id)
+      .then(setWaitlistQueue)
+      .catch(() => undefined);
+  }, [accessToken, property]);
+
+  async function joinWaitlist() {
+    if (!accessToken) return;
+    setWaitlistBusy(true);
+    setWaitlistError(null);
+    try {
+      const entry = await api.joinWaitlist(accessToken, id, waitlistNote || undefined);
+      setMyWaitlistEntry(entry);
+    } catch (err) {
+      setWaitlistError(err instanceof Error ? err.message : 'Failed to join the waitlist');
+    } finally {
+      setWaitlistBusy(false);
+    }
+  }
+
+  async function leaveWaitlist() {
+    if (!accessToken) return;
+    setWaitlistBusy(true);
+    setWaitlistError(null);
+    try {
+      await api.leaveWaitlist(accessToken, id);
+      setMyWaitlistEntry(null);
+    } catch (err) {
+      setWaitlistError(err instanceof Error ? err.message : 'Failed to leave the waitlist');
+    } finally {
+      setWaitlistBusy(false);
+    }
+  }
+
   function openEditPanel() {
     if (!property) return;
     setEditForm({
+      acceptsSection8Vouchers: property.acceptsSection8Vouchers,
       sellingSoon: property.sellingSoon,
       sellingSoonNote: property.sellingSoonNote ?? '',
       rentToOwnAvailable: property.rentToOwnAvailable,
@@ -241,6 +295,8 @@ export default function PropertyDetailPage() {
                     <dd style={{ margin: 0 }}>
                       {(unit?.isAvailable ?? property.isActive) ? 'Available now' : 'Not currently available'}
                     </dd>
+                    <dt style={{ color: theme.textMuted }}>Section 8 Vouchers</dt>
+                    <dd style={{ margin: 0 }}>{property.acceptsSection8Vouchers ? 'Accepted' : 'Not accepted'}</dd>
                     <dt style={{ color: theme.textMuted }}>Rent-to-Own</dt>
                     <dd style={{ margin: 0 }}>{property.rentToOwnAvailable ? 'Available' : 'Not offered'}</dd>
                     <dt style={{ color: theme.textMuted }}>Lease-to-Own</dt>
@@ -416,6 +472,71 @@ export default function PropertyDetailPage() {
                     Cancel
                   </button>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {canMessageLandlord && (
+          <div style={{ marginTop: 16, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>Waiting List</h3>
+            {myWaitlistEntry ? (
+              <>
+                <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 8 }}>
+                  You're on the waiting list for this property{myWaitlistEntry.note ? `: "${myWaitlistEntry.note}"` : '.'}
+                </p>
+                {waitlistError && <p style={{ color: theme.danger, fontSize: 13 }}>{waitlistError}</p>}
+                <button
+                  onClick={leaveWaitlist}
+                  disabled={waitlistBusy}
+                  style={{ padding: '10px 18px', borderRadius: 8, border: `1px solid ${theme.border}`, background: 'white', cursor: 'pointer', fontSize: 13 }}
+                >
+                  {waitlistBusy ? 'Leaving...' : 'Leave waiting list'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 8, marginBottom: 10 }}>
+                  Not available right now? Join the waiting list to be considered when a unit opens up.
+                </p>
+                <textarea
+                  value={waitlistNote}
+                  onChange={(e) => setWaitlistNote(e.target.value)}
+                  placeholder="Optional note for the landlord"
+                  rows={2}
+                  style={{ width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 13, fontFamily: 'inherit', marginBottom: 10 }}
+                />
+                {waitlistError && <p style={{ color: theme.danger, fontSize: 13 }}>{waitlistError}</p>}
+                <button
+                  onClick={joinWaitlist}
+                  disabled={waitlistBusy}
+                  style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: theme.primary, color: 'white', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}
+                >
+                  {waitlistBusy ? 'Joining...' : 'Join waiting list'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {canManage && waitlistQueue && (
+          <div style={{ marginTop: 16, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>Waiting List ({waitlistQueue.length})</h3>
+            {waitlistQueue.length === 0 ? (
+              <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 8 }}>No one has joined the waiting list yet.</p>
+            ) : (
+              <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                {waitlistQueue.map((entry, i) => (
+                  <div key={entry.id} style={{ padding: '10px 12px', borderRadius: 8, border: `1px solid ${theme.border}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700, color: theme.text }}>
+                      <span>#{i + 1} {entry.displayName}</span>
+                      <span style={{ color: theme.textMuted, fontWeight: 400 }}>
+                        {new Date(entry.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {entry.note && <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 4 }}>{entry.note}</div>}
+                  </div>
+                ))}
               </div>
             )}
           </div>

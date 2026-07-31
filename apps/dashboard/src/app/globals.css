@@ -1,0 +1,13 @@
+.nav-drawer {
+  width: 100%;
+}
+
+.nav-drawer-link:hover {
+  background: #f2f5f8;
+}
+
+@media (min-width: 480px) {
+  .nav-drawer {
+    width: 380px;
+  }
+}

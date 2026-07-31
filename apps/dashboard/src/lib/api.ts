@@ -41,6 +41,8 @@ export interface UnitSummary {
   isAvailable: boolean;
 }
 
+export type PropertyType = 'APARTMENT' | 'HOUSE' | 'CONDO' | 'TOWNHOME' | 'OTHER';
+
 export interface PropertySummary {
   id: string;
   title: string;
@@ -57,6 +59,8 @@ export interface PropertySummary {
   landlordDisplayName: string;
   units: UnitSummary[];
   isActive: boolean;
+  propertyType: PropertyType;
+  acceptsSection8Vouchers: boolean;
   sellingSoon: boolean;
   sellingSoonNote: string | null;
   rentToOwnAvailable: boolean;
@@ -69,6 +73,8 @@ export interface PropertySummary {
 }
 
 export interface UpdatePropertyPayload {
+  propertyType?: PropertyType;
+  acceptsSection8Vouchers?: boolean;
   sellingSoon?: boolean;
   sellingSoonNote?: string;
   rentToOwnAvailable?: boolean;
@@ -76,6 +82,45 @@ export interface UpdatePropertyPayload {
   sellerFinancingAvailable?: boolean;
   workForRentAvailable?: boolean;
   tenantSwapAllowed?: boolean;
+}
+
+export interface CreatePropertyPayload {
+  title: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  zip: string;
+  description?: string;
+  monthlyRentCents?: number;
+  depositCents?: number;
+  petPolicy?: string;
+  propertyType?: PropertyType;
+  acceptsSection8Vouchers?: boolean;
+}
+
+export interface AgencySummary {
+  id: string;
+  displayName: string;
+  managedPropertyCount: number;
+}
+
+export interface RentEstimate {
+  estimatedMonthlyRentCents: number | null;
+  sampleSize: number;
+  city?: string;
+  state?: string;
+  bedrooms?: number;
+}
+
+export interface WaitlistEntry {
+  id: string;
+  propertyId: string;
+  userId: string;
+  displayName: string;
+  note: string | null;
+  createdAt: string;
+  property?: { id: string; title: string; addressLine1: string; city: string; state: string };
 }
 
 export interface CurrentUser {
@@ -217,10 +262,37 @@ export const api = {
   register: (payload: { email: string; password: string; displayName: string; role: string }) =>
     request<TokenPair>('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   me: (accessToken: string) => request<CurrentUser>('/users/me', {}, accessToken),
-  listProperties: (accessToken: string) => request<PropertySummary[]>('/properties', {}, accessToken),
+  listProperties: (accessToken: string, filters: { type?: string; section8?: boolean } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.type) params.set('type', filters.type);
+    if (filters.section8) params.set('section8', 'true');
+    const qs = params.toString();
+    return request<PropertySummary[]>(`/properties${qs ? `?${qs}` : ''}`, {}, accessToken);
+  },
   getProperty: (accessToken: string, id: string) => request<PropertySummary>(`/properties/${id}`, {}, accessToken),
+  createProperty: (accessToken: string, payload: CreatePropertyPayload) =>
+    request<PropertySummary>('/properties', { method: 'POST', body: JSON.stringify(payload) }, accessToken),
   updateProperty: (accessToken: string, id: string, payload: UpdatePropertyPayload) =>
     request<PropertySummary>(`/properties/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }, accessToken),
+  listAgencies: (accessToken: string) => request<AgencySummary[]>('/properties/agencies', {}, accessToken),
+  getRentEstimate: (accessToken: string, params: { city?: string; state?: string; bedrooms?: number }) => {
+    const qs = new URLSearchParams();
+    if (params.city) qs.set('city', params.city);
+    if (params.state) qs.set('state', params.state);
+    if (params.bedrooms !== undefined) qs.set('bedrooms', String(params.bedrooms));
+    return request<RentEstimate>(`/properties/rent-estimate?${qs.toString()}`, {}, accessToken);
+  },
+  joinWaitlist: (accessToken: string, propertyId: string, note?: string) =>
+    request<WaitlistEntry>(
+      `/properties/${propertyId}/waitlist`,
+      { method: 'POST', body: JSON.stringify({ note }) },
+      accessToken,
+    ),
+  leaveWaitlist: (accessToken: string, propertyId: string) =>
+    request<void>(`/properties/${propertyId}/waitlist`, { method: 'DELETE' }, accessToken),
+  listPropertyWaitlist: (accessToken: string, propertyId: string) =>
+    request<WaitlistEntry[]>(`/properties/${propertyId}/waitlist`, {}, accessToken),
+  listMyWaitlists: (accessToken: string) => request<WaitlistEntry[]>('/properties/waitlists/me', {}, accessToken),
   listConversations: (accessToken: string, filters: { propertyId?: string; status?: string } = {}) => {
     const params = new URLSearchParams();
     if (filters.propertyId) params.set('propertyId', filters.propertyId);

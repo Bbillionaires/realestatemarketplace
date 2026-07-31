@@ -1,16 +1,38 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api, PropertySummary } from '../../lib/api';
 import { useAuth } from '../../lib/auth-context';
 import { theme } from '../../lib/theme';
 import { PropertyCard } from '../../components/PropertyCard';
 import { NavBar } from '../../components/NavBar';
 
+const TYPE_LABELS: Record<string, string> = {
+  APARTMENT: 'Apartments for Rent',
+  HOUSE: 'Houses for Rent',
+};
+
 export default function PropertiesPage() {
+  return (
+    <Suspense
+      fallback={
+        <main style={{ minHeight: '100vh', background: theme.bg }}>
+          <NavBar />
+          <p style={{ padding: 24 }}>Loading...</p>
+        </main>
+      }
+    >
+      <PropertiesPageInner />
+    </Suspense>
+  );
+}
+
+function PropertiesPageInner() {
   const { accessToken, isLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const typeFilter = searchParams.get('type') ?? undefined;
   const [properties, setProperties] = useState<PropertySummary[]>([]);
   const [query, setQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -22,12 +44,13 @@ export default function PropertiesPage() {
       router.push('/login');
       return;
     }
+    setLoading(true);
     api
-      .listProperties(accessToken)
+      .listProperties(accessToken, { type: typeFilter })
       .then(setProperties)
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load properties'))
       .finally(() => setLoading(false));
-  }, [accessToken, isLoading, router]);
+  }, [accessToken, isLoading, router, typeFilter]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -102,7 +125,9 @@ export default function PropertiesPage() {
       </div>
 
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: 24 }}>
-        <h1 style={{ fontSize: 22, marginBottom: 4, color: theme.text }}>Rental Properties</h1>
+        <h1 style={{ fontSize: 22, marginBottom: 4, color: theme.text }}>
+          {typeFilter && TYPE_LABELS[typeFilter] ? TYPE_LABELS[typeFilter] : 'Rental Properties'}
+        </h1>
         <p style={{ color: theme.textMuted, marginTop: 0, marginBottom: 20, fontSize: 14 }}>
           {filtered.length} {filtered.length === 1 ? 'rental' : 'rentals'}
         </p>
