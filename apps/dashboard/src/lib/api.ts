@@ -57,6 +57,25 @@ export interface PropertySummary {
   landlordDisplayName: string;
   units: UnitSummary[];
   isActive: boolean;
+  sellingSoon: boolean;
+  sellingSoonNote: string | null;
+  rentToOwnAvailable: boolean;
+  leaseToOwnAvailable: boolean;
+  sellerFinancingAvailable: boolean;
+  workForRentAvailable: boolean;
+  tenantSwapAllowed: boolean;
+  ownerId?: string;
+  managerIds?: string[];
+}
+
+export interface UpdatePropertyPayload {
+  sellingSoon?: boolean;
+  sellingSoonNote?: string;
+  rentToOwnAvailable?: boolean;
+  leaseToOwnAvailable?: boolean;
+  sellerFinancingAvailable?: boolean;
+  workForRentAvailable?: boolean;
+  tenantSwapAllowed?: boolean;
 }
 
 export interface CurrentUser {
@@ -200,6 +219,8 @@ export const api = {
   me: (accessToken: string) => request<CurrentUser>('/users/me', {}, accessToken),
   listProperties: (accessToken: string) => request<PropertySummary[]>('/properties', {}, accessToken),
   getProperty: (accessToken: string, id: string) => request<PropertySummary>(`/properties/${id}`, {}, accessToken),
+  updateProperty: (accessToken: string, id: string, payload: UpdatePropertyPayload) =>
+    request<PropertySummary>(`/properties/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }, accessToken),
   listConversations: (accessToken: string, filters: { propertyId?: string; status?: string } = {}) => {
     const params = new URLSearchParams();
     if (filters.propertyId) params.set('propertyId', filters.propertyId);

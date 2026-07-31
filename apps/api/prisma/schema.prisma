@@ -336,6 +336,17 @@ model Property {
   petPolicy        String?
   photoUrl         String?
   isActive         Boolean  @default(true)
+
+  // Landlord-set flags surfaced to prospective/current tenants alongside
+  // the standard listing terms.
+  sellingSoon               Boolean @default(false)
+  sellingSoonNote           String?
+  rentToOwnAvailable        Boolean @default(false)
+  leaseToOwnAvailable       Boolean @default(false)
+  sellerFinancingAvailable  Boolean @default(false)
+  workForRentAvailable      Boolean @default(false)
+  tenantSwapAllowed         Boolean @default(false)
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

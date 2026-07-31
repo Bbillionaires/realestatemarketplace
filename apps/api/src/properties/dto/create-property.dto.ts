@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CreatePropertyDto {
   @IsString()
@@ -49,4 +49,36 @@ export class CreatePropertyDto {
   @IsString()
   @MaxLength(300)
   petPolicy?: string;
+
+  /** Landlord notes the property will likely be listed for sale in the near future. */
+  @IsOptional()
+  @IsBoolean()
+  sellingSoon?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  sellingSoonNote?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  rentToOwnAvailable?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  leaseToOwnAvailable?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  sellerFinancingAvailable?: boolean;
+
+  /** Landlord is open to trading work/labor in exchange for rent. */
+  @IsOptional()
+  @IsBoolean()
+  workForRentAvailable?: boolean;
+
+  /** Landlord allows a current tenant to swap leases/units with another equally-qualified tenant. */
+  @IsOptional()
+  @IsBoolean()
+  tenantSwapAllowed?: boolean;
 }
