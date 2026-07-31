@@ -12,14 +12,29 @@ export default function HomePage() {
           Landlords and tenants communicate through the platform relay — never sharing real phone
           numbers directly.
         </p>
-        <div style={{ marginTop: 24, display: 'flex', gap: 12, justifyContent: 'center' }}>
+        <div style={{ marginTop: 24, display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           <Link
-            href="/login"
+            href="/register"
             style={{
               padding: '12px 24px',
               borderRadius: 8,
               background: theme.primary,
               color: 'white',
+              fontWeight: 700,
+              fontSize: 14,
+              textDecoration: 'none',
+            }}
+          >
+            Sign up
+          </Link>
+          <Link
+            href="/login"
+            style={{
+              padding: '12px 24px',
+              borderRadius: 8,
+              border: `1px solid ${theme.border}`,
+              background: theme.card,
+              color: theme.text,
               fontWeight: 700,
               fontSize: 14,
               textDecoration: 'none',
