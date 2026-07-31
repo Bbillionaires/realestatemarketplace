@@ -341,7 +341,13 @@ export default function PropertyDetailPage() {
                   <input
                     type="checkbox"
                     checked={!!editForm.sellingSoon}
-                    onChange={(e) => setEditForm((f) => ({ ...f, sellingSoon: e.target.checked }))}
+                    onChange={(e) =>
+                      setEditForm((f) => ({
+                        ...f,
+                        sellingSoon: e.target.checked,
+                        sellingSoonNote: e.target.checked ? f.sellingSoonNote : '',
+                      }))
+                    }
                     style={{ marginTop: 3 }}
                   />
                   <span>

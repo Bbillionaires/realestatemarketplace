@@ -150,4 +150,117 @@ describe('Properties (e2e)', () => {
     expect(list.body.length).toBeGreaterThanOrEqual(1);
     expect(list.body[0].ownerId).toBeDefined();
   });
+
+  it('defaults the new listing-option flags to false when not provided', async () => {
+    const landlordToken = await registerUser('LANDLORD', 'landlord-flags-default@example.com');
+
+    const created = await request(app.getHttpServer())
+      .post('/api/properties')
+      .set('Authorization', `Bearer ${landlordToken}`)
+      .send(propertyPayload);
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      sellingSoon: false,
+      sellingSoonNote: null,
+      rentToOwnAvailable: false,
+      leaseToOwnAvailable: false,
+      sellerFinancingAvailable: false,
+      workForRentAvailable: false,
+      tenantSwapAllowed: false,
+    });
+  });
+
+  it('persists the new listing-option flags on create and exposes them to prospective tenants', async () => {
+    const landlordToken = await registerUser('LANDLORD', 'landlord-flags-create@example.com');
+    const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-flags-create@example.com');
+
+    const created = await request(app.getHttpServer())
+      .post('/api/properties')
+      .set('Authorization', `Bearer ${landlordToken}`)
+      .send({
+        ...propertyPayload,
+        sellingSoon: true,
+        sellingSoonNote: 'Considering listing after the current lease ends',
+        rentToOwnAvailable: true,
+        leaseToOwnAvailable: true,
+        sellerFinancingAvailable: true,
+        workForRentAvailable: true,
+        tenantSwapAllowed: true,
+      });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      sellingSoon: true,
+      sellingSoonNote: 'Considering listing after the current lease ends',
+      rentToOwnAvailable: true,
+      leaseToOwnAvailable: true,
+      sellerFinancingAvailable: true,
+      workForRentAvailable: true,
+      tenantSwapAllowed: true,
+    });
+
+    const asTenant = await request(app.getHttpServer())
+      .get(`/api/properties/${created.body.id}`)
+      .set('Authorization', `Bearer ${tenantToken}`);
+    expect(asTenant.status).toBe(200);
+    expect(asTenant.body.ownerId).toBeUndefined();
+    expect(asTenant.body).toMatchObject({
+      sellingSoon: true,
+      rentToOwnAvailable: true,
+      tenantSwapAllowed: true,
+    });
+  });
+
+  it('lets the owning landlord update the new listing-option flags via PATCH', async () => {
+    const landlordToken = await registerUser('LANDLORD', 'landlord-flags-update@example.com');
+
+    const created = await request(app.getHttpServer())
+      .post('/api/properties')
+      .set('Authorization', `Bearer ${landlordToken}`)
+      .send(propertyPayload);
+    const propertyId = created.body.id;
+
+    const updated = await request(app.getHttpServer())
+      .patch(`/api/properties/${propertyId}`)
+      .set('Authorization', `Bearer ${landlordToken}`)
+      .send({ workForRentAvailable: true, tenantSwapAllowed: true });
+    expect(updated.status).toBe(200);
+    expect(updated.body.workForRentAvailable).toBe(true);
+    expect(updated.body.tenantSwapAllowed).toBe(true);
+    expect(updated.body.rentToOwnAvailable).toBe(false);
+
+    const reverted = await request(app.getHttpServer())
+      .patch(`/api/properties/${propertyId}`)
+      .set('Authorization', `Bearer ${landlordToken}`)
+      .send({ workForRentAvailable: false, tenantSwapAllowed: false });
+    expect(reverted.status).toBe(200);
+    expect(reverted.body.workForRentAvailable).toBe(false);
+    expect(reverted.body.tenantSwapAllowed).toBe(false);
+  });
+
+  it('rejects non-boolean values for the new listing-option flags', async () => {
+    const landlordToken = await registerUser('LANDLORD', 'landlord-flags-invalid@example.com');
+
+    const res = await request(app.getHttpServer())
+      .post('/api/properties')
+      .set('Authorization', `Bearer ${landlordToken}`)
+      .send({ ...propertyPayload, sellingSoon: 'yes-please' });
+    expect(res.status).toBe(400);
+  });
+
+  it('prevents a different landlord from toggling listing-option flags on someone else\'s property', async () => {
+    const ownerToken = await registerUser('LANDLORD', 'owner-flags@example.com');
+    const otherLandlordToken = await registerUser('LANDLORD', 'other-flags@example.com');
+
+    const created = await request(app.getHttpServer())
+      .post('/api/properties')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(propertyPayload);
+    const propertyId = created.body.id;
+
+    const res = await request(app.getHttpServer())
+      .patch(`/api/properties/${propertyId}`)
+      .set('Authorization', `Bearer ${otherLandlordToken}`)
+      .send({ sellingSoon: true });
+    expect(res.status).toBe(403);
+  });
 });
