@@ -6,14 +6,16 @@ import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { corsOriginValidator, parseAllowedOrigins } from './common/utils/cors-origins.util';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bodyParser: true });
   const logger = new Logger('Bootstrap');
 
   app.use(helmet());
+  const allowedOrigins = parseAllowedOrigins(process.env.DASHBOARD_BASE_URL, 'http://localhost:3000');
   app.enableCors({
-    origin: process.env.DASHBOARD_BASE_URL ?? 'http://localhost:3000',
+    origin: corsOriginValidator(allowedOrigins),
     credentials: true,
   });
   app.setGlobalPrefix('api');

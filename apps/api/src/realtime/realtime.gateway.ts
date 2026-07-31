@@ -12,6 +12,7 @@ import type { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfig } from '../config/configuration';
 import { MessageResponseDto } from '../messages/dto/message-response.dto';
+import { corsOriginValidator, parseAllowedOrigins } from '../common/utils/cors-origins.util';
 
 interface AuthedSocket extends Socket {
   data: { userId?: string };
@@ -32,7 +33,10 @@ interface AuthedSocket extends Socket {
  */
 @WebSocketGateway({
   namespace: 'conversations',
-  cors: { origin: process.env.DASHBOARD_BASE_URL ?? 'http://localhost:3000', credentials: true },
+  cors: {
+    origin: corsOriginValidator(parseAllowedOrigins(process.env.DASHBOARD_BASE_URL, 'http://localhost:3000')),
+    credentials: true,
+  },
 })
 export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
