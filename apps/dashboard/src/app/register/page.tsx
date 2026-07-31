@@ -7,9 +7,17 @@ import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth-context';
 import { theme } from '../../lib/theme';
 
-export default function LoginPage() {
+const ROLE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'PROSPECTIVE_TENANT', label: "I'm looking for a place to rent" },
+  { value: 'LANDLORD', label: 'I own property I want to list' },
+  { value: 'PROPERTY_MANAGER', label: 'I manage property for an owner' },
+];
+
+export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [role, setRole] = useState(ROLE_OPTIONS[0].value);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { setTokens } = useAuth();
@@ -20,11 +28,11 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const tokens = await api.login(email, password);
+      const tokens = await api.register({ email, password, displayName, role });
       setTokens(tokens);
       router.push('/properties');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -39,13 +47,14 @@ export default function LoginPage() {
     border: `1px solid ${theme.border}`,
     fontSize: 14,
     boxSizing: 'border-box' as const,
+    fontFamily: 'inherit',
   };
 
   return (
     <main style={{ minHeight: '100vh', background: theme.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div
         style={{
-          maxWidth: 380,
+          maxWidth: 420,
           width: '100%',
           padding: 32,
           background: theme.card,
@@ -57,22 +66,68 @@ export default function LoginPage() {
         <Link href="/" style={{ fontWeight: 800, fontSize: 18, color: theme.primary, textDecoration: 'none' }}>
           Affordable Home Match
         </Link>
-        <h1 style={{ fontSize: 20, marginTop: 20, marginBottom: 20, color: theme.text }}>Sign in</h1>
+        <h1 style={{ fontSize: 20, marginTop: 20, marginBottom: 20, color: theme.text }}>Create your account</h1>
         <form onSubmit={onSubmit}>
+          <label style={{ display: 'block', marginBottom: 14, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
+            Full name
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              required
+              maxLength={120}
+              style={inputStyle}
+            />
+          </label>
           <label style={{ display: 'block', marginBottom: 14, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
             Email
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={inputStyle} />
           </label>
-          <label style={{ display: 'block', marginBottom: 18, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
+          <label style={{ display: 'block', marginBottom: 14, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
             Password
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              minLength={12}
               style={inputStyle}
             />
+            <span style={{ display: 'block', marginTop: 4, fontWeight: 400, color: theme.textMuted }}>
+              At least 12 characters.
+            </span>
           </label>
+          <div style={{ marginBottom: 18 }}>
+            <span style={{ display: 'block', marginBottom: 8, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
+              I am signing up as
+            </span>
+            {ROLE_OPTIONS.map((opt) => (
+              <label
+                key={opt.value}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 12px',
+                  border: `1px solid ${role === opt.value ? theme.primary : theme.border}`,
+                  borderRadius: 8,
+                  marginBottom: 8,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  background: role === opt.value ? theme.primaryLight : 'white',
+                }}
+              >
+                <input
+                  type="radio"
+                  name="role"
+                  value={opt.value}
+                  checked={role === opt.value}
+                  onChange={() => setRole(opt.value)}
+                />
+                {opt.label}
+              </label>
+            ))}
+          </div>
           {error && (
             <p style={{ color: theme.danger, fontSize: 13, background: '#fdecec', padding: '8px 10px', borderRadius: 6 }}>
               {error}
@@ -93,13 +148,13 @@ export default function LoginPage() {
               cursor: 'pointer',
             }}
           >
-            {loading ? 'Signing in...' : 'Sign in'}
+            {loading ? 'Creating account...' : 'Create account'}
           </button>
         </form>
         <p style={{ marginTop: 18, fontSize: 13, color: theme.textMuted, textAlign: 'center' }}>
-          New here?{' '}
-          <Link href="/register" style={{ color: theme.primary, fontWeight: 600, textDecoration: 'none' }}>
-            Create an account
+          Already have an account?{' '}
+          <Link href="/login" style={{ color: theme.primary, fontWeight: 600, textDecoration: 'none' }}>
+            Sign in
           </Link>
         </p>
       </div>
