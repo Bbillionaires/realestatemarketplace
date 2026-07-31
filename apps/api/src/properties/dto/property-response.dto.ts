@@ -1,3 +1,5 @@
+import { PropertyType } from '@prisma/client';
+
 export class UnitResponseDto {
   id!: string;
   propertyId!: string;
@@ -43,6 +45,8 @@ export class PropertyResponseDto {
   petPolicy!: string | null;
   photoUrl!: string | null;
   isActive!: boolean;
+  propertyType!: PropertyType;
+  acceptsSection8Vouchers!: boolean;
   sellingSoon!: boolean;
   sellingSoonNote!: string | null;
   rentToOwnAvailable!: boolean;
@@ -75,6 +79,8 @@ export class PropertyResponseDto {
       petPolicy: string | null;
       photoUrl: string | null;
       isActive: boolean;
+      propertyType: PropertyType;
+      acceptsSection8Vouchers: boolean;
       sellingSoon: boolean;
       sellingSoonNote: string | null;
       rentToOwnAvailable: boolean;
@@ -114,6 +120,8 @@ export class PropertyResponseDto {
     dto.petPolicy = property.petPolicy;
     dto.photoUrl = property.photoUrl;
     dto.isActive = property.isActive;
+    dto.propertyType = property.propertyType;
+    dto.acceptsSection8Vouchers = property.acceptsSection8Vouchers;
     dto.sellingSoon = property.sellingSoon;
     dto.sellingSoonNote = property.sellingSoonNote;
     dto.rentToOwnAvailable = property.rentToOwnAvailable;

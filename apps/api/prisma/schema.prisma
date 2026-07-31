@@ -34,6 +34,14 @@ enum Role {
   SUPER_ADMINISTRATOR
 }
 
+enum PropertyType {
+  APARTMENT
+  HOUSE
+  CONDO
+  TOWNHOME
+  OTHER
+}
+
 enum ConversationStatus {
   NEW_INQUIRY
   ACTIVE
@@ -242,6 +250,7 @@ model User {
   auditLogs             AuditLog[]
   adminNotes            AdminNote[]                   @relation("AdminNoteAuthor")
   moderationFlagsReviewed ModerationFlag[]             @relation("ModerationFlagReviewer")
+  waitlistEntries       PropertyWaitlistEntry[]
 
   @@index([role])
 }
@@ -336,6 +345,8 @@ model Property {
   petPolicy        String?
   photoUrl         String?
   isActive         Boolean  @default(true)
+  propertyType     PropertyType @default(OTHER)
+  acceptsSection8Vouchers Boolean @default(false)
 
   // Landlord-set flags surfaced to prospective/current tenants alongside
   // the standard listing terms.
@@ -353,6 +364,7 @@ model Property {
   units               PropertyUnit[]
   managerAssignments  PropertyManagerAssignment[]
   conversations       Conversation[]
+  waitlistEntries     PropertyWaitlistEntry[]
 
   @@index([ownerId])
   @@index([city, state])
@@ -389,6 +401,22 @@ model PropertyManagerAssignment {
 
   @@unique([propertyId, userId])
   @@index([userId])
+}
+
+// A tenant joining the waitlist for a property that is not currently
+// available. Ordered by createdAt (first-come, first-served) when the
+// landlord reviews the queue.
+model PropertyWaitlistEntry {
+  id         String   @id @default(uuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@unique([propertyId, userId])
+  @@index([propertyId])
 }
 
 // ---------------------------------------------------------------------------

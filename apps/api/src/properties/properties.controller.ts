@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditLog } from '../common/decorators/audit-log.decorator';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
@@ -8,6 +8,7 @@ import { UpdatePropertyDto } from './dto/update-property.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitDto } from './dto/update-unit.dto';
 import { AssignManagerDto } from './dto/assign-manager.dto';
+import { JoinWaitlistDto } from './dto/join-waitlist.dto';
 
 @Controller('properties')
 export class PropertiesController {
@@ -24,15 +25,42 @@ export class PropertiesController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('city') city?: string,
     @Query('state') state?: string,
+    @Query('type') propertyType?: string,
+    @Query('section8') section8?: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
   ) {
     return this.propertiesService.findAll(user, {
       city,
       state,
+      propertyType,
+      acceptsSection8Vouchers: section8 === 'true' ? true : undefined,
       skip: skip ? parseInt(skip, 10) : undefined,
       take: take ? parseInt(take, 10) : undefined,
     });
+  }
+
+  @Get('agencies')
+  listAgencies() {
+    return this.propertiesService.listAgencies();
+  }
+
+  @Get('rent-estimate')
+  rentEstimate(
+    @Query('city') city?: string,
+    @Query('state') state?: string,
+    @Query('bedrooms') bedrooms?: string,
+  ) {
+    return this.propertiesService.estimateRent({
+      city,
+      state,
+      bedrooms: bedrooms ? parseInt(bedrooms, 10) : undefined,
+    });
+  }
+
+  @Get('waitlists/me')
+  myWaitlists(@CurrentUser() user: AuthenticatedUser) {
+    return this.propertiesService.listMyWaitlistEntries(user);
   }
 
   @Get(':id')
@@ -86,5 +114,22 @@ export class PropertiesController {
     @Body() dto: UpdateUnitDto,
   ) {
     return this.propertiesService.updateUnit(user, id, unitId, dto);
+  }
+
+  @Post(':id/waitlist')
+  @AuditLog('property.waitlist_join', 'Property')
+  joinWaitlist(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: JoinWaitlistDto) {
+    return this.propertiesService.joinWaitlist(user, id, dto.note);
+  }
+
+  @Delete(':id/waitlist')
+  @AuditLog('property.waitlist_leave', 'Property')
+  leaveWaitlist(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.propertiesService.leaveWaitlist(user, id);
+  }
+
+  @Get(':id/waitlist')
+  listWaitlist(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.propertiesService.listWaitlist(user, id);
   }
 }

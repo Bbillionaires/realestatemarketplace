@@ -1,4 +1,7 @@
-import { IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { PropertyType } from '@prisma/client';
+
+const PROPERTY_TYPES = Object.values(PropertyType);
 
 export class CreatePropertyDto {
   @IsString()
@@ -49,6 +52,14 @@ export class CreatePropertyDto {
   @IsString()
   @MaxLength(300)
   petPolicy?: string;
+
+  @IsOptional()
+  @IsIn(PROPERTY_TYPES)
+  propertyType?: PropertyType;
+
+  @IsOptional()
+  @IsBoolean()
+  acceptsSection8Vouchers?: boolean;
 
   /** Landlord notes the property will likely be listed for sale in the near future. */
   @IsOptional()

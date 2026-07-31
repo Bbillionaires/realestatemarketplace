@@ -1,0 +1,263 @@
+import { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { TestingModule } from '@nestjs/testing';
+import { PrismaService } from '../src/prisma/prisma.service';
+import { createTestApp, resetDatabase } from './utils/test-app';
+
+describe('Property extras: type/Section8 filters, agencies, rent estimate, waitlists (e2e)', () => {
+  let app: INestApplication;
+  let moduleRef: TestingModule;
+  let prisma: PrismaService;
+
+  beforeAll(async () => {
+    ({ app, moduleRef } = await createTestApp());
+    prisma = moduleRef.get(PrismaService);
+  });
+
+  beforeEach(async () => {
+    await resetDatabase(prisma);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  async function registerUser(role: string, email: string) {
+    const res = await request(app.getHttpServer()).post('/api/auth/register').send({
+      email,
+      password: 'CorrectHorseBatteryStaple1!',
+      displayName: `${role} user`,
+      role,
+    });
+    return res.body.accessToken as string;
+  }
+
+  const basePayload = {
+    title: 'Extras Test Property',
+    addressLine1: '1 Extras Way',
+    city: 'Jacksonville',
+    state: 'FL',
+    zip: '32202',
+    monthlyRentCents: 120000,
+  };
+
+  describe('propertyType and Section 8 filters', () => {
+    it('defaults propertyType to OTHER and acceptsSection8Vouchers to false', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-type-default@example.com');
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send(basePayload);
+      expect(created.status).toBe(201);
+      expect(created.body.propertyType).toBe('OTHER');
+      expect(created.body.acceptsSection8Vouchers).toBe(false);
+    });
+
+    it('persists an explicit propertyType and acceptsSection8Vouchers on create', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-type-set@example.com');
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ ...basePayload, propertyType: 'HOUSE', acceptsSection8Vouchers: true });
+      expect(created.status).toBe(201);
+      expect(created.body.propertyType).toBe('HOUSE');
+      expect(created.body.acceptsSection8Vouchers).toBe(true);
+    });
+
+    it('rejects an invalid propertyType value', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-type-invalid@example.com');
+      const res = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ ...basePayload, propertyType: 'CASTLE' });
+      expect(res.status).toBe(400);
+    });
+
+    it('filters the properties list by type and by Section 8 acceptance', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-type-filter@example.com');
+      await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ ...basePayload, title: 'House A', propertyType: 'HOUSE' });
+      await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ ...basePayload, title: 'Apartment A', propertyType: 'APARTMENT', acceptsSection8Vouchers: true });
+
+      const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-type-filter@example.com');
+
+      const houses = await request(app.getHttpServer())
+        .get('/api/properties?type=HOUSE')
+        .set('Authorization', `Bearer ${tenantToken}`);
+      expect(houses.status).toBe(200);
+      expect(houses.body.every((p: { propertyType: string }) => p.propertyType === 'HOUSE')).toBe(true);
+      expect(houses.body.some((p: { title: string }) => p.title === 'House A')).toBe(true);
+
+      const section8 = await request(app.getHttpServer())
+        .get('/api/properties?section8=true')
+        .set('Authorization', `Bearer ${tenantToken}`);
+      expect(section8.status).toBe(200);
+      expect(section8.body.every((p: { acceptsSection8Vouchers: boolean }) => p.acceptsSection8Vouchers)).toBe(true);
+      expect(section8.body.some((p: { title: string }) => p.title === 'Apartment A')).toBe(true);
+    });
+  });
+
+  describe('Agencies directory', () => {
+    it('lists property managers with at least one active assignment, ordered by managed count', async () => {
+      const ownerToken = await registerUser('LANDLORD', 'owner-agency@example.com');
+      const managerToken = await registerUser('PROPERTY_MANAGER', 'manager-agency@example.com');
+      const idleManagerToken = await registerUser('PROPERTY_MANAGER', 'idle-manager-agency@example.com');
+      void idleManagerToken;
+      const managerUser = await prisma.user.findUniqueOrThrow({ where: { email: 'manager-agency@example.com' } });
+
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(basePayload);
+      await request(app.getHttpServer())
+        .post(`/api/properties/${created.body.id}/managers`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ userId: managerUser.id });
+
+      const anyToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-agency@example.com');
+      const res = await request(app.getHttpServer())
+        .get('/api/properties/agencies')
+        .set('Authorization', `Bearer ${anyToken}`);
+      expect(res.status).toBe(200);
+      const names = res.body.map((a: { displayName: string }) => a.displayName);
+      expect(names).toContain('PROPERTY_MANAGER user');
+      expect(names).not.toContain('idle-manager-agency@example.com');
+      const entry = res.body.find((a: { displayName: string }) => a.displayName === 'PROPERTY_MANAGER user');
+      expect(entry.managedPropertyCount).toBe(1);
+    });
+  });
+
+  describe('Rental estimate', () => {
+    it('averages rentCents across matching units and reports the sample size', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-estimate@example.com');
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ ...basePayload, city: 'EstimateCity', state: 'FL' });
+      const propertyId = created.body.id;
+
+      await request(app.getHttpServer())
+        .post(`/api/properties/${propertyId}/units`)
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ unitLabel: '1', bedrooms: 2, rentCents: 100000 });
+      await request(app.getHttpServer())
+        .post(`/api/properties/${propertyId}/units`)
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ unitLabel: '2', bedrooms: 2, rentCents: 200000 });
+
+      const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-estimate@example.com');
+      const res = await request(app.getHttpServer())
+        .get('/api/properties/rent-estimate?city=EstimateCity&state=FL&bedrooms=2')
+        .set('Authorization', `Bearer ${tenantToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.estimatedMonthlyRentCents).toBe(150000);
+      expect(res.body.sampleSize).toBe(2);
+    });
+
+    it('returns null with a zero sample size when nothing matches', async () => {
+      const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-estimate-empty@example.com');
+      const res = await request(app.getHttpServer())
+        .get('/api/properties/rent-estimate?city=NowhereVille&state=ZZ&bedrooms=9')
+        .set('Authorization', `Bearer ${tenantToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.estimatedMonthlyRentCents).toBeNull();
+      expect(res.body.sampleSize).toBe(0);
+    });
+  });
+
+  describe('Waiting lists', () => {
+    it('lets a tenant join and leave a property waitlist, and lets the owner view the queue', async () => {
+      const ownerToken = await registerUser('LANDLORD', 'owner-waitlist@example.com');
+      const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-waitlist@example.com');
+      const otherLandlordToken = await registerUser('LANDLORD', 'other-landlord-waitlist@example.com');
+
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(basePayload);
+      const propertyId = created.body.id;
+
+      const join = await request(app.getHttpServer())
+        .post(`/api/properties/${propertyId}/waitlist`)
+        .set('Authorization', `Bearer ${tenantToken}`)
+        .send({ note: 'Would love a 2-bed unit here' });
+      expect(join.status).toBe(201);
+      expect(join.body.note).toBe('Would love a 2-bed unit here');
+      expect(join.body.displayName).toBe('PROSPECTIVE_TENANT user');
+
+      const myList = await request(app.getHttpServer())
+        .get('/api/properties/waitlists/me')
+        .set('Authorization', `Bearer ${tenantToken}`);
+      expect(myList.status).toBe(200);
+      expect(myList.body).toHaveLength(1);
+      expect(myList.body[0].property.id).toBe(propertyId);
+
+      const forbiddenView = await request(app.getHttpServer())
+        .get(`/api/properties/${propertyId}/waitlist`)
+        .set('Authorization', `Bearer ${otherLandlordToken}`);
+      expect(forbiddenView.status).toBe(403);
+
+      const ownerView = await request(app.getHttpServer())
+        .get(`/api/properties/${propertyId}/waitlist`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(ownerView.status).toBe(200);
+      expect(ownerView.body).toHaveLength(1);
+      expect(ownerView.body[0].userId).toBeDefined();
+
+      const leave = await request(app.getHttpServer())
+        .delete(`/api/properties/${propertyId}/waitlist`)
+        .set('Authorization', `Bearer ${tenantToken}`);
+      expect(leave.status).toBe(200);
+
+      const afterLeave = await request(app.getHttpServer())
+        .get(`/api/properties/${propertyId}/waitlist`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(afterLeave.body).toHaveLength(0);
+    });
+
+    it('forbids a landlord from joining a waitlist', async () => {
+      const ownerToken = await registerUser('LANDLORD', 'owner-waitlist-2@example.com');
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(basePayload);
+
+      const res = await request(app.getHttpServer())
+        .post(`/api/properties/${created.body.id}/waitlist`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({});
+      expect(res.status).toBe(403);
+    });
+
+    it('is idempotent when the same tenant joins twice, updating the note instead of erroring', async () => {
+      const ownerToken = await registerUser('LANDLORD', 'owner-waitlist-3@example.com');
+      const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-waitlist-3@example.com');
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(basePayload);
+      const propertyId = created.body.id;
+
+      await request(app.getHttpServer())
+        .post(`/api/properties/${propertyId}/waitlist`)
+        .set('Authorization', `Bearer ${tenantToken}`)
+        .send({ note: 'first note' });
+      const second = await request(app.getHttpServer())
+        .post(`/api/properties/${propertyId}/waitlist`)
+        .set('Authorization', `Bearer ${tenantToken}`)
+        .send({ note: 'updated note' });
+      expect(second.status).toBe(201);
+      expect(second.body.note).toBe('updated note');
+
+      const ownerView = await request(app.getHttpServer())
+        .get(`/api/properties/${propertyId}/waitlist`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(ownerView.body).toHaveLength(1);
+    });
+  });
+});
