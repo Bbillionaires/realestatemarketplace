@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { Role } from '@prisma/client';
 
 /**
@@ -32,4 +32,29 @@ export class RegisterDto {
     message: 'role must be one of PROSPECTIVE_TENANT, LANDLORD, PROPERTY_MANAGER',
   })
   role!: SelfServiceRole;
+
+  // Landlord-only onboarding questions. Ignored for other roles.
+  @IsOptional()
+  @IsBoolean()
+  hasLawnCareProvider?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hasPlumbingProvider?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hasHandymanProvider?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hasPestControlProvider?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hasRoofingProvider?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  requestsPropertyManagementHelp?: boolean;
 }

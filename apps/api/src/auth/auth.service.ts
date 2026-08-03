@@ -44,13 +44,24 @@ export class AuthService {
 
     const passwordHash = await argon2.hash(dto.password, { type: argon2.argon2id });
 
+    const isLandlord = (dto.role as unknown as Role) === Role.LANDLORD;
     const user = await this.prisma.user.create({
       data: {
         email: dto.email.toLowerCase(),
         passwordHash,
         role: dto.role as unknown as Role,
         profile: {
-          create: { displayName: dto.displayName },
+          create: {
+            displayName: dto.displayName,
+            ...(isLandlord && {
+              hasLawnCareProvider: dto.hasLawnCareProvider ?? false,
+              hasPlumbingProvider: dto.hasPlumbingProvider ?? false,
+              hasHandymanProvider: dto.hasHandymanProvider ?? false,
+              hasPestControlProvider: dto.hasPestControlProvider ?? false,
+              hasRoofingProvider: dto.hasRoofingProvider ?? false,
+              requestsPropertyManagementHelp: dto.requestsPropertyManagementHelp ?? false,
+            }),
+          },
         },
         notificationPreference: {
           create: {

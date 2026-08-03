@@ -49,6 +49,77 @@ describe('Auth (e2e)', () => {
     expect(res.status).toBe(409);
   });
 
+  it('persists a landlord\'s onboarding service-provider answers on their profile', async () => {
+    const registered = await request(app.getHttpServer()).post('/api/auth/register').send({
+      email: 'landlord-onboarding@example.com',
+      password: 'CorrectHorseBatteryStaple1!',
+      displayName: 'Onboarding Landlord',
+      role: 'LANDLORD',
+      hasLawnCareProvider: true,
+      hasPlumbingProvider: false,
+      hasHandymanProvider: true,
+      hasPestControlProvider: false,
+      hasRoofingProvider: false,
+      requestsPropertyManagementHelp: true,
+    });
+    expect(registered.status).toBe(201);
+
+    const me = await request(app.getHttpServer())
+      .get('/api/users/me')
+      .set('Authorization', `Bearer ${registered.body.accessToken}`);
+    expect(me.status).toBe(200);
+    expect(me.body.profile).toMatchObject({
+      hasLawnCareProvider: true,
+      hasPlumbingProvider: false,
+      hasHandymanProvider: true,
+      hasPestControlProvider: false,
+      hasRoofingProvider: false,
+      requestsPropertyManagementHelp: true,
+    });
+  });
+
+  it('defaults a landlord\'s onboarding answers to false when not provided', async () => {
+    const registered = await request(app.getHttpServer()).post('/api/auth/register').send({
+      email: 'landlord-onboarding-default@example.com',
+      password: 'CorrectHorseBatteryStaple1!',
+      displayName: 'Default Landlord',
+      role: 'LANDLORD',
+    });
+    expect(registered.status).toBe(201);
+
+    const me = await request(app.getHttpServer())
+      .get('/api/users/me')
+      .set('Authorization', `Bearer ${registered.body.accessToken}`);
+    expect(me.body.profile).toMatchObject({
+      hasLawnCareProvider: false,
+      hasPlumbingProvider: false,
+      hasHandymanProvider: false,
+      hasPestControlProvider: false,
+      hasRoofingProvider: false,
+      requestsPropertyManagementHelp: false,
+    });
+  });
+
+  it('ignores onboarding service-provider answers for non-landlord roles', async () => {
+    const registered = await request(app.getHttpServer()).post('/api/auth/register').send({
+      email: 'tenant-onboarding@example.com',
+      password: 'CorrectHorseBatteryStaple1!',
+      displayName: 'Onboarding Tenant',
+      role: 'PROSPECTIVE_TENANT',
+      hasLawnCareProvider: true,
+      requestsPropertyManagementHelp: true,
+    });
+    expect(registered.status).toBe(201);
+
+    const me = await request(app.getHttpServer())
+      .get('/api/users/me')
+      .set('Authorization', `Bearer ${registered.body.accessToken}`);
+    expect(me.body.profile).toMatchObject({
+      hasLawnCareProvider: false,
+      requestsPropertyManagementHelp: false,
+    });
+  });
+
   it('logs in with correct credentials and rejects incorrect ones', async () => {
     await request(app.getHttpServer()).post('/api/auth/register').send(credentials);
 

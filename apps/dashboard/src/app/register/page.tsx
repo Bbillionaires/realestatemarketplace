@@ -13,22 +13,50 @@ const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: 'PROPERTY_MANAGER', label: 'I manage property for an owner' },
 ];
 
+const SERVICE_PROVIDER_QUESTIONS: {
+  key: 'hasLawnCareProvider' | 'hasPlumbingProvider' | 'hasHandymanProvider' | 'hasPestControlProvider' | 'hasRoofingProvider';
+  label: string;
+}[] = [
+  { key: 'hasLawnCareProvider', label: 'Do you have someone to cut the grass / lawn care?' },
+  { key: 'hasPlumbingProvider', label: 'Do you have a plumber?' },
+  { key: 'hasHandymanProvider', label: 'Do you have a handyman for minor, non-permitted work?' },
+  { key: 'hasPestControlProvider', label: 'Do you have pest control?' },
+  { key: 'hasRoofingProvider', label: 'Do you have a roofer?' },
+];
+
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [role, setRole] = useState(ROLE_OPTIONS[0].value);
+  const [serviceAnswers, setServiceAnswers] = useState<Record<string, boolean>>({});
+  const [requestsPropertyManagementHelp, setRequestsPropertyManagementHelp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { setTokens } = useAuth();
   const router = useRouter();
+
+  const isLandlord = role === 'LANDLORD';
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const tokens = await api.register({ email, password, displayName, role });
+      const tokens = await api.register({
+        email,
+        password,
+        displayName,
+        role,
+        ...(isLandlord && {
+          hasLawnCareProvider: !!serviceAnswers.hasLawnCareProvider,
+          hasPlumbingProvider: !!serviceAnswers.hasPlumbingProvider,
+          hasHandymanProvider: !!serviceAnswers.hasHandymanProvider,
+          hasPestControlProvider: !!serviceAnswers.hasPestControlProvider,
+          hasRoofingProvider: !!serviceAnswers.hasRoofingProvider,
+          requestsPropertyManagementHelp,
+        }),
+      });
       setTokens(tokens);
       router.push('/properties');
     } catch (err) {
@@ -128,6 +156,36 @@ export default function RegisterPage() {
               </label>
             ))}
           </div>
+
+          {isLandlord && (
+            <div style={{ marginBottom: 18, padding: 14, background: theme.bg, borderRadius: 8 }}>
+              <span style={{ display: 'block', marginBottom: 10, fontSize: 13, color: theme.text, fontWeight: 700 }}>
+                A few questions about your property
+              </span>
+              <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 0, marginBottom: 10 }}>
+                If you don't already have a provider for something below, we may be able to connect you with one.
+              </p>
+              {SERVICE_PROVIDER_QUESTIONS.map((q) => (
+                <label key={q.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!serviceAnswers[q.key]}
+                    onChange={(e) => setServiceAnswers((prev) => ({ ...prev, [q.key]: e.target.checked }))}
+                  />
+                  {q.label}
+                </label>
+              ))}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${theme.border}` }}>
+                <input
+                  type="checkbox"
+                  checked={requestsPropertyManagementHelp}
+                  onChange={(e) => setRequestsPropertyManagementHelp(e.target.checked)}
+                />
+                I'd like help finding a property manager
+              </label>
+            </div>
+          )}
+
           {error && (
             <p style={{ color: theme.danger, fontSize: 13, background: '#fdecec', padding: '8px 10px', borderRadius: 6 }}>
               {error}

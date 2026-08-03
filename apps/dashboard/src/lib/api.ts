@@ -202,7 +202,15 @@ export interface CurrentUser {
   role: string;
   isActive: boolean;
   canSuspendUsers: boolean;
-  profile: { displayName: string } | null;
+  profile: {
+    displayName: string;
+    hasLawnCareProvider?: boolean;
+    hasPlumbingProvider?: boolean;
+    hasHandymanProvider?: boolean;
+    hasPestControlProvider?: boolean;
+    hasRoofingProvider?: boolean;
+    requestsPropertyManagementHelp?: boolean;
+  } | null;
 }
 
 export interface UserSummary {
@@ -213,7 +221,15 @@ export interface UserSummary {
   canSuspendUsers: boolean;
   createdAt: string;
   lastLoginAt: string | null;
-  profile: { displayName: string } | null;
+  profile: {
+    displayName: string;
+    hasLawnCareProvider?: boolean;
+    hasPlumbingProvider?: boolean;
+    hasHandymanProvider?: boolean;
+    hasPestControlProvider?: boolean;
+    hasRoofingProvider?: boolean;
+    requestsPropertyManagementHelp?: boolean;
+  } | null;
 }
 
 export interface ConversationSummary {
@@ -332,8 +348,18 @@ export interface SendMessageResult {
 export const api = {
   login: (email: string, password: string) =>
     request<TokenPair>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
-  register: (payload: { email: string; password: string; displayName: string; role: string }) =>
-    request<TokenPair>('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
+  register: (payload: {
+    email: string;
+    password: string;
+    displayName: string;
+    role: string;
+    hasLawnCareProvider?: boolean;
+    hasPlumbingProvider?: boolean;
+    hasHandymanProvider?: boolean;
+    hasPestControlProvider?: boolean;
+    hasRoofingProvider?: boolean;
+    requestsPropertyManagementHelp?: boolean;
+  }) => request<TokenPair>('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   me: (accessToken: string) => request<CurrentUser>('/users/me', {}, accessToken),
   listProperties: (accessToken: string, filters: { type?: string; section8?: boolean } = {}) => {
     const params = new URLSearchParams();

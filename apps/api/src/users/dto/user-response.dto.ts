@@ -21,6 +21,12 @@ export class UserResponseDto {
     bio: string | null;
     timezone: string;
     locale: string;
+    hasLawnCareProvider: boolean;
+    hasPlumbingProvider: boolean;
+    hasHandymanProvider: boolean;
+    hasPestControlProvider: boolean;
+    hasRoofingProvider: boolean;
+    requestsPropertyManagementHelp: boolean;
   } | null;
 
   static from(user: {
@@ -37,6 +43,12 @@ export class UserResponseDto {
       bio: string | null;
       timezone: string;
       locale: string;
+      hasLawnCareProvider: boolean;
+      hasPlumbingProvider: boolean;
+      hasHandymanProvider: boolean;
+      hasPestControlProvider: boolean;
+      hasRoofingProvider: boolean;
+      requestsPropertyManagementHelp: boolean;
     } | null;
   }): UserResponseDto {
     const dto = new UserResponseDto();
@@ -54,6 +66,12 @@ export class UserResponseDto {
           bio: user.profile.bio,
           timezone: user.profile.timezone,
           locale: user.profile.locale,
+          hasLawnCareProvider: user.profile.hasLawnCareProvider,
+          hasPlumbingProvider: user.profile.hasPlumbingProvider,
+          hasHandymanProvider: user.profile.hasHandymanProvider,
+          hasPestControlProvider: user.profile.hasPestControlProvider,
+          hasRoofingProvider: user.profile.hasRoofingProvider,
+          requestsPropertyManagementHelp: user.profile.requestsPropertyManagementHelp,
         }
       : null;
     return dto;

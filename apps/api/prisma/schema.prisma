@@ -307,6 +307,18 @@ model UserProfile {
   bio          String?
   timezone     String   @default("America/New_York")
   locale       String   @default("en")
+
+  // Landlord-only onboarding questions, collected at registration. Used to
+  // identify which service gaps the platform can offer to fill (outsourced
+  // vendor referrals) and whether the landlord wants help finding a
+  // property manager. Meaningless for non-landlord roles.
+  hasLawnCareProvider            Boolean @default(false)
+  hasPlumbingProvider            Boolean @default(false)
+  hasHandymanProvider            Boolean @default(false)
+  hasPestControlProvider         Boolean @default(false)
+  hasRoofingProvider             Boolean @default(false)
+  requestsPropertyManagementHelp Boolean @default(false)
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
