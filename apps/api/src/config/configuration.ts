@@ -12,6 +12,11 @@ export interface AppConfig {
   phoneEncryptionKey: string;
   phoneHashSecret: string;
   smsProvider: 'mock' | 'twilio' | 'telnyx';
+  emailProvider: 'mock' | 'resend';
+  resend: {
+    apiKey: string;
+    fromAddress: string;
+  };
   twilio: {
     accountSid: string;
     authToken: string;
@@ -47,6 +52,11 @@ export default (): AppConfig => ({
   phoneEncryptionKey: process.env.PHONE_ENCRYPTION_KEY ?? '',
   phoneHashSecret: process.env.PHONE_HASH_SECRET ?? '',
   smsProvider: (process.env.SMS_PROVIDER as 'mock' | 'twilio' | 'telnyx') ?? 'mock',
+  emailProvider: (process.env.EMAIL_PROVIDER as 'mock' | 'resend') ?? 'mock',
+  resend: {
+    apiKey: process.env.RESEND_API_KEY ?? '',
+    fromAddress: process.env.RESEND_FROM_ADDRESS ?? 'notifications@affordablehomematch.com',
+  },
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
     authToken: process.env.TWILIO_AUTH_TOKEN ?? '',

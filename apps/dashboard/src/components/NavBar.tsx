@@ -8,6 +8,8 @@ import { useCurrentUser } from '../lib/use-current-user';
 import { theme } from '../lib/theme';
 
 const STAFF_ROLES = ['STAFF_MODERATOR', 'ADMINISTRATOR', 'SUPER_ADMINISTRATOR'];
+const ADMIN_ROLES = ['ADMINISTRATOR', 'SUPER_ADMINISTRATOR'];
+const TENANT_ROLES = ['PROSPECTIVE_TENANT', 'CURRENT_TENANT'];
 
 interface NavLink {
   href: string;
@@ -80,6 +82,9 @@ export function NavBar() {
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const isStaff = !!user && STAFF_ROLES.includes(user.role);
+  const isAdmin = !!user && ADMIN_ROLES.includes(user.role);
+  const isLender = !!user && user.role === 'LENDER';
+  const isTenant = !!user && TENANT_ROLES.includes(user.role);
   const isLoggedIn = !!accessToken;
 
   function close() {
@@ -183,6 +188,9 @@ export function NavBar() {
                 <>
                   <DrawerLink href="/inbox" label="Inbox" onClick={close} />
                   {isStaff && <DrawerLink href="/moderation" label="Moderation" onClick={close} />}
+                  {isAdmin && <DrawerLink href="/admin/lenders" label="Lender Assignments" onClick={close} />}
+                  {isLender && <DrawerLink href="/lender" label="Lender Dashboard" onClick={close} />}
+                  {isTenant && <DrawerLink href="/lender-requests" label="Lender Requests" onClick={close} />}
                   <button
                     onClick={signOut}
                     style={{

@@ -24,6 +24,25 @@ async function request<T>(path: string, options: RequestInit = {}, accessToken?:
   return body as T;
 }
 
+/** Like request(), but sends a FormData body (no Content-Type set manually — the
+ * browser adds the multipart boundary) for endpoints that accept a file upload. */
+async function requestMultipart<T>(path: string, formData: FormData, accessToken?: string): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  const res = await fetch(`${API_BASE_URL}/api${path}`, { method: 'POST', body: formData, headers });
+  const body = await res.json().catch(() => undefined);
+
+  if (!res.ok) {
+    const message = body?.error?.message ?? res.statusText;
+    throw new Error(Array.isArray(message) ? message.join(', ') : message);
+  }
+
+  return body as T;
+}
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -145,6 +164,36 @@ export interface WaitlistEntry {
   note: string | null;
   createdAt: string;
   property?: { id: string; title: string; addressLine1: string; city: string; state: string };
+}
+
+export type LenderAccessTier = 'BASIC' | 'PREMIUM';
+export type LenderRequestStatus = 'PENDING' | 'FULFILLED' | 'DECLINED';
+
+export interface LenderAssignment {
+  id: string;
+  propertyId: string;
+  propertyTitle: string;
+  lenderId: string;
+  lenderDisplayName: string;
+  tenantId: string | null;
+  tenantDisplayName: string | null;
+  accessTier: LenderAccessTier;
+  assignedAt: string;
+  revokedAt: string | null;
+}
+
+export interface LenderRequest {
+  id: string;
+  lenderAssignmentId: string;
+  propertyId: string;
+  propertyTitle: string;
+  message: string | null;
+  status: LenderRequestStatus;
+  responseNote: string | null;
+  responseFileName: string | null;
+  emailSent: boolean;
+  createdAt: string;
+  respondedAt: string | null;
 }
 
 export interface CurrentUser {
@@ -412,4 +461,41 @@ export const api = {
       { method: 'PATCH', body: JSON.stringify({ enabled }) },
       accessToken,
     ),
+  createLenderAssignment: (
+    accessToken: string,
+    payload: { propertyId: string; lenderId: string; tenantId?: string; accessTier?: LenderAccessTier },
+  ) => request<LenderAssignment>('/lenders/assignments', { method: 'POST', body: JSON.stringify(payload) }, accessToken),
+  listLenderAssignments: (accessToken: string, filters: { propertyId?: string; lenderId?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.propertyId) params.set('propertyId', filters.propertyId);
+    if (filters.lenderId) params.set('lenderId', filters.lenderId);
+    const qs = params.toString();
+    return request<LenderAssignment[]>(`/lenders/assignments${qs ? `?${qs}` : ''}`, {}, accessToken);
+  },
+  updateLenderAssignment: (
+    accessToken: string,
+    id: string,
+    payload: { tenantId?: string | null; accessTier?: LenderAccessTier },
+  ) => request<LenderAssignment>(`/lenders/assignments/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }, accessToken),
+  revokeLenderAssignment: (accessToken: string, id: string) =>
+    request<LenderAssignment>(`/lenders/assignments/${id}/revoke`, { method: 'PATCH' }, accessToken),
+  listMyLenderAssignments: (accessToken: string) =>
+    request<LenderAssignment[]>('/lenders/assignments/me', {}, accessToken),
+  createLenderRequest: (accessToken: string, assignmentId: string, message?: string) =>
+    request<LenderRequest>(
+      `/lenders/assignments/${assignmentId}/requests`,
+      { method: 'POST', body: JSON.stringify({ message }) },
+      accessToken,
+    ),
+  listLenderRequestsForAssignment: (accessToken: string, assignmentId: string) =>
+    request<LenderRequest[]>(`/lenders/assignments/${assignmentId}/requests`, {}, accessToken),
+  listMyLenderRequests: (accessToken: string) => request<LenderRequest[]>('/lenders/requests/me', {}, accessToken),
+  submitLenderRequest: (accessToken: string, requestId: string, responseNote?: string, file?: File) => {
+    const formData = new FormData();
+    if (responseNote) formData.set('responseNote', responseNote);
+    if (file) formData.set('file', file);
+    return requestMultipart<LenderRequest>(`/lenders/requests/${requestId}/submit`, formData, accessToken);
+  },
+  declineLenderRequest: (accessToken: string, requestId: string) =>
+    request<LenderRequest>(`/lenders/requests/${requestId}/decline`, { method: 'PATCH' }, accessToken),
 };

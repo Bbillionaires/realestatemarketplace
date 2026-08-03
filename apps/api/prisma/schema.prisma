@@ -29,9 +29,21 @@ enum Role {
   CURRENT_TENANT
   LANDLORD
   PROPERTY_MANAGER
+  LENDER
   STAFF_MODERATOR
   ADMINISTRATOR
   SUPER_ADMINISTRATOR
+}
+
+enum LenderAccessTier {
+  BASIC
+  PREMIUM
+}
+
+enum LenderRequestStatus {
+  PENDING
+  FULFILLED
+  DECLINED
 }
 
 enum PropertyType {
@@ -262,6 +274,9 @@ model User {
   adminNotes            AdminNote[]                   @relation("AdminNoteAuthor")
   moderationFlagsReviewed ModerationFlag[]             @relation("ModerationFlagReviewer")
   waitlistEntries       PropertyWaitlistEntry[]
+  lenderAssignments     LenderAssignment[]             @relation("LenderAssignmentLender")
+  tenantLenderAssignments LenderAssignment[]            @relation("LenderAssignmentTenant")
+  lenderAssignmentsCreated LenderAssignment[]           @relation("LenderAssignmentAssignedBy")
 
   @@index([role])
 }
@@ -380,6 +395,7 @@ model Property {
   managerAssignments  PropertyManagerAssignment[]
   conversations       Conversation[]
   waitlistEntries     PropertyWaitlistEntry[]
+  lenderAssignments   LenderAssignment[]
 
   @@index([ownerId])
   @@index([city, state])
@@ -432,6 +448,50 @@ model PropertyWaitlistEntry {
 
   @@unique([propertyId, userId])
   @@index([propertyId])
+}
+
+// A lender given read access to one property, assigned by an administrator
+// (not the landlord) so access — and future paid tiers — stay centrally
+// controlled. tenantId marks which tenant's profile the lender can see;
+// the admin updates it as tenants change.
+model LenderAssignment {
+  id           String   @id @default(uuid())
+  propertyId   String
+  property     Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  lenderId     String
+  lender       User     @relation("LenderAssignmentLender", fields: [lenderId], references: [id], onDelete: Cascade)
+  tenantId     String?
+  tenant       User?    @relation("LenderAssignmentTenant", fields: [tenantId], references: [id])
+  assignedById String
+  assignedBy   User     @relation("LenderAssignmentAssignedBy", fields: [assignedById], references: [id])
+  accessTier   LenderAccessTier @default(BASIC)
+  assignedAt   DateTime @default(now())
+  revokedAt    DateTime?
+
+  requests LenderPaymentRequest[]
+
+  @@unique([propertyId, lenderId])
+  @@index([lenderId])
+  @@index([tenantId])
+}
+
+// A lender's ask for payment/income proof from the assignment's tenant. No
+// financial data or uploaded file content is ever persisted here — only
+// metadata about the request/response. The tenant's actual submission is
+// forwarded straight through as an email attachment and discarded.
+model LenderPaymentRequest {
+  id                 String   @id @default(uuid())
+  lenderAssignmentId String
+  lenderAssignment   LenderAssignment @relation(fields: [lenderAssignmentId], references: [id], onDelete: Cascade)
+  message            String?
+  status             LenderRequestStatus @default(PENDING)
+  responseNote       String?
+  responseFileName   String?
+  emailSent          Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  respondedAt        DateTime?
+
+  @@index([lenderAssignmentId])
 }
 
 // ---------------------------------------------------------------------------

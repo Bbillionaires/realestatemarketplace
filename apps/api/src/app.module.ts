@@ -9,6 +9,7 @@ import { RedisModule } from './redis/redis.module';
 import { CommonModule } from './common/common.module';
 import { AuditModule } from './audit/audit.module';
 import { SmsModule } from './sms/sms.module';
+import { EmailModule } from './email/email.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { PhoneModule } from './phone/phone.module';
@@ -19,6 +20,7 @@ import { ConversationsModule } from './conversations/conversations.module';
 import { SmsWebhooksModule } from './sms/sms-webhooks.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { ShowingsModule } from './showings/showings.module';
+import { LendersModule } from './lenders/lenders.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -47,6 +49,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     CommonModule,
     AuditModule,
     SmsModule,
+    EmailModule,
     AuthModule,
     UsersModule,
     PhoneModule,
@@ -56,6 +59,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     ConversationsModule,
     SmsWebhooksModule,
     ShowingsModule,
+    LendersModule,
   ],
   providers: [
     // Order matters: JwtAuthGuard populates request.user, then RolesGuard
