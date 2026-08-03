@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, PropertySummary, UpdatePropertyPayload, WaitlistEntry } from '../../../lib/api';
+import { api, PropertySummary, UpdatePropertyPayload, UtilityType, WaitlistEntry } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth-context';
 import { useCurrentUser } from '../../../lib/use-current-user';
 import { formatMoney, primaryUnit } from '../../../lib/format';
@@ -21,7 +21,24 @@ const LISTING_OPTIONS: { flag: keyof UpdatePropertyPayload; label: string; hint:
   { flag: 'sellerFinancingAvailable', label: 'Seller Financing', hint: 'You would finance the purchase directly for a buyer.' },
   { flag: 'workForRentAvailable', label: 'Work for Rent', hint: 'Willing to exchange labor/work for reduced or free rent.' },
   { flag: 'tenantSwapAllowed', label: 'Tenant Swap Allowed', hint: 'Current tenant may swap leases with an equally qualified tenant.' },
+  { flag: 'subleaseAllowed', label: 'Subleasing Allowed', hint: 'Tenant may sublease the unit to another party.' },
 ];
+
+const UTILITY_OPTIONS: { value: UtilityType; label: string }[] = [
+  { value: 'ELECTRIC', label: 'Electric' },
+  { value: 'WATER', label: 'Water' },
+  { value: 'GAS', label: 'Gas' },
+  { value: 'TRASH', label: 'Trash' },
+  { value: 'LAWN_SERVICE', label: 'Lawn service' },
+  { value: 'INTERNET', label: 'Internet' },
+  { value: 'CABLE', label: 'Cable' },
+  { value: 'PARKING', label: 'Parking' },
+];
+
+function toMonthInput(iso: string | null): string {
+  if (!iso) return '';
+  return iso.slice(0, 7);
+}
 
 export default function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -45,6 +62,14 @@ export default function PropertyDetailPage() {
   const [editForm, setEditForm] = useState<UpdatePropertyPayload>({});
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  const [unitEditOpen, setUnitEditOpen] = useState(false);
+  const [unitBedrooms, setUnitBedrooms] = useState('');
+  const [unitBathrooms, setUnitBathrooms] = useState('');
+  const [unitSquareFeet, setUnitSquareFeet] = useState('');
+  const [unitRent, setUnitRent] = useState('');
+  const [unitSaving, setUnitSaving] = useState(false);
+  const [unitError, setUnitError] = useState<string | null>(null);
 
   const [myWaitlistEntry, setMyWaitlistEntry] = useState<WaitlistEntry | null>(null);
   const [waitlistNote, setWaitlistNote] = useState('');
@@ -115,6 +140,10 @@ export default function PropertyDetailPage() {
     if (!property) return;
     setEditForm({
       acceptsSection8Vouchers: property.acceptsSection8Vouchers,
+      amenities: property.amenities ?? '',
+      utilitiesIncluded: property.utilitiesIncluded,
+      subleaseAllowed: property.subleaseAllowed,
+      currentLeaseEndDate: toMonthInput(property.currentLeaseEndDate),
       sellingSoon: property.sellingSoon,
       sellingSoonNote: property.sellingSoonNote ?? '',
       rentToOwnAvailable: property.rentToOwnAvailable,
@@ -132,13 +161,64 @@ export default function PropertyDetailPage() {
     setEditSaving(true);
     setEditError(null);
     try {
-      const updated = await api.updateProperty(accessToken, property.id, editForm);
+      const updated = await api.updateProperty(accessToken, property.id, {
+        ...editForm,
+        currentLeaseEndDate: editForm.currentLeaseEndDate ? `${editForm.currentLeaseEndDate}-01T00:00:00.000Z` : undefined,
+      });
       setProperty(updated);
       setEditOpen(false);
     } catch (err) {
       setEditError(err instanceof Error ? err.message : 'Failed to save changes');
     } finally {
       setEditSaving(false);
+    }
+  }
+
+  function toggleEditUtility(value: UtilityType) {
+    setEditForm((f) => {
+      const current = f.utilitiesIncluded ?? [];
+      return {
+        ...f,
+        utilitiesIncluded: current.includes(value) ? current.filter((v) => v !== value) : [...current, value],
+      };
+    });
+  }
+
+  function openUnitEditPanel() {
+    if (!property) return;
+    const unit = property.units[0];
+    setUnitBedrooms(unit?.bedrooms?.toString() ?? '');
+    setUnitBathrooms(unit?.bathrooms?.toString() ?? '');
+    setUnitSquareFeet(unit?.squareFeet?.toString() ?? '');
+    setUnitRent(unit?.rentCents !== undefined && unit?.rentCents !== null ? (unit.rentCents / 100).toString() : '');
+    setUnitError(null);
+    setUnitEditOpen(true);
+  }
+
+  async function saveUnitEditPanel() {
+    if (!accessToken || !property) return;
+    setUnitSaving(true);
+    setUnitError(null);
+    try {
+      const payload = {
+        bedrooms: unitBedrooms.trim() ? parseInt(unitBedrooms, 10) : undefined,
+        bathrooms: unitBathrooms.trim() ? parseFloat(unitBathrooms) : undefined,
+        squareFeet: unitSquareFeet.trim() ? parseInt(unitSquareFeet, 10) : undefined,
+        rentCents: unitRent.trim() ? Math.round(parseFloat(unitRent) * 100) : undefined,
+      };
+      const existingUnit = property.units[0];
+      if (existingUnit) {
+        await api.updateUnit(accessToken, property.id, existingUnit.id, payload);
+      } else {
+        await api.createUnit(accessToken, property.id, { unitLabel: '1', ...payload });
+      }
+      const refreshed = await api.getProperty(accessToken, property.id);
+      setProperty(refreshed);
+      setUnitEditOpen(false);
+    } catch (err) {
+      setUnitError(err instanceof Error ? err.message : 'Failed to save unit details');
+    } finally {
+      setUnitSaving(false);
     }
   }
 
@@ -291,6 +371,27 @@ export default function PropertyDetailPage() {
                     <dd style={{ margin: 0 }}>{unit?.squareFeet ?? 'Not specified'}</dd>
                     <dt style={{ color: theme.textMuted }}>Pet policy</dt>
                     <dd style={{ margin: 0 }}>{property.petPolicy ?? 'Not specified'}</dd>
+                    <dt style={{ color: theme.textMuted }}>Amenities</dt>
+                    <dd style={{ margin: 0 }}>{property.amenities ?? 'Not specified'}</dd>
+                    <dt style={{ color: theme.textMuted }}>Utilities covered by landlord</dt>
+                    <dd style={{ margin: 0 }}>
+                      {property.utilitiesIncluded.length > 0
+                        ? property.utilitiesIncluded
+                            .map((u) => UTILITY_OPTIONS.find((o) => o.value === u)?.label ?? u)
+                            .join(', ')
+                        : 'None — tenant covers all utilities'}
+                    </dd>
+                    <dt style={{ color: theme.textMuted }}>Subleasing</dt>
+                    <dd style={{ margin: 0 }}>{property.subleaseAllowed ? 'Allowed' : 'Not allowed'}</dd>
+                    <dt style={{ color: theme.textMuted }}>Current lease ends</dt>
+                    <dd style={{ margin: 0 }}>
+                      {property.currentLeaseEndDate
+                        ? new Date(property.currentLeaseEndDate).toLocaleDateString(undefined, {
+                            month: 'long',
+                            year: 'numeric',
+                          })
+                        : 'Not specified'}
+                    </dd>
                     <dt style={{ color: theme.textMuted }}>Availability</dt>
                     <dd style={{ margin: 0 }}>
                       {(unit?.isAvailable ?? property.isActive) ? 'Available now' : 'Not currently available'}
@@ -446,6 +547,47 @@ export default function PropertyDetailPage() {
                   </label>
                 ))}
 
+                <div style={{ marginTop: 14, marginBottom: 14 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Amenities</label>
+                  <textarea
+                    value={editForm.amenities ?? ''}
+                    onChange={(e) => setEditForm((f) => ({ ...f, amenities: e.target.value }))}
+                    placeholder="e.g. in-unit washer/dryer, pool access, fenced yard"
+                    rows={2}
+                    style={{ width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 13, fontFamily: 'inherit' }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                    Utilities covered by landlord
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {UTILITY_OPTIONS.map((opt) => (
+                      <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+                        <input
+                          type="checkbox"
+                          checked={(editForm.utilitiesIncluded ?? []).includes(opt.value)}
+                          onChange={() => toggleEditUtility(opt.value)}
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                    Current lease end date, if occupied
+                  </label>
+                  <input
+                    type="month"
+                    value={editForm.currentLeaseEndDate ?? ''}
+                    onChange={(e) => setEditForm((f) => ({ ...f, currentLeaseEndDate: e.target.value }))}
+                    style={{ padding: '10px 12px', borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 14 }}
+                  />
+                </div>
+
                 {editError && <p style={{ color: theme.danger, fontSize: 13 }}>{editError}</p>}
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
@@ -467,6 +609,105 @@ export default function PropertyDetailPage() {
                   <button
                     onClick={() => setEditOpen(false)}
                     disabled={editSaving}
+                    style={{ padding: '10px 18px', borderRadius: 8, border: `1px solid ${theme.border}`, background: 'white', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {canManage && (
+          <div style={{ marginTop: 16, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: 15 }}>Unit details</h3>
+              {!unitEditOpen && (
+                <button
+                  onClick={openUnitEditPanel}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    border: `1px solid ${theme.border}`,
+                    background: 'white',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+
+            {!unitEditOpen && (
+              <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 8, marginBottom: 0 }}>
+                Bedrooms, bathrooms, square footage, and unit rent shown to tenants.
+              </p>
+            )}
+
+            {unitEditOpen && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+                  <label style={{ flex: 1, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
+                    Bedrooms
+                    <input
+                      type="number"
+                      min={0}
+                      max={20}
+                      value={unitBedrooms}
+                      onChange={(e) => setUnitBedrooms(e.target.value)}
+                      style={{ display: 'block', width: '100%', padding: '10px 12px', marginTop: 6, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 14, boxSizing: 'border-box' }}
+                    />
+                  </label>
+                  <label style={{ flex: 1, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
+                    Bathrooms
+                    <input
+                      type="number"
+                      min={0}
+                      max={20}
+                      step="0.5"
+                      value={unitBathrooms}
+                      onChange={(e) => setUnitBathrooms(e.target.value)}
+                      style={{ display: 'block', width: '100%', padding: '10px 12px', marginTop: 6, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 14, boxSizing: 'border-box' }}
+                    />
+                  </label>
+                  <label style={{ flex: 1, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
+                    Square feet
+                    <input
+                      type="number"
+                      min={0}
+                      value={unitSquareFeet}
+                      onChange={(e) => setUnitSquareFeet(e.target.value)}
+                      style={{ display: 'block', width: '100%', padding: '10px 12px', marginTop: 6, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 14, boxSizing: 'border-box' }}
+                    />
+                  </label>
+                </div>
+                <label style={{ display: 'block', fontSize: 13, color: theme.textMuted, fontWeight: 600, marginBottom: 14 }}>
+                  Unit rent ($/month)
+                  <input
+                    type="number"
+                    min={0}
+                    value={unitRent}
+                    onChange={(e) => setUnitRent(e.target.value)}
+                    style={{ display: 'block', width: '100%', maxWidth: 200, padding: '10px 12px', marginTop: 6, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 14, boxSizing: 'border-box' }}
+                  />
+                </label>
+
+                {unitError && <p style={{ color: theme.danger, fontSize: 13 }}>{unitError}</p>}
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={saveUnitEditPanel}
+                    disabled={unitSaving}
+                    style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: theme.primary, color: 'white', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    {unitSaving ? 'Saving...' : 'Save changes'}
+                  </button>
+                  <button
+                    onClick={() => setUnitEditOpen(false)}
+                    disabled={unitSaving}
                     style={{ padding: '10px 18px', borderRadius: 8, border: `1px solid ${theme.border}`, background: 'white', cursor: 'pointer' }}
                   >
                     Cancel

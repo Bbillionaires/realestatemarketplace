@@ -1,7 +1,8 @@
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { PropertyType } from '@prisma/client';
+import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { PropertyType, UtilityType } from '@prisma/client';
 
 const PROPERTY_TYPES = Object.values(PropertyType);
+const UTILITY_TYPES = Object.values(UtilityType);
 
 export class CreatePropertyDto {
   @IsString()
@@ -60,6 +61,26 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsBoolean()
   acceptsSection8Vouchers?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  amenities?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsIn(UTILITY_TYPES, { each: true })
+  utilitiesIncluded?: UtilityType[];
+
+  /** Landlord allows the tenant to sublease the unit to another party. */
+  @IsOptional()
+  @IsBoolean()
+  subleaseAllowed?: boolean;
+
+  /** Month/year the current tenant's lease ends, if occupied. */
+  @IsOptional()
+  @IsDateString()
+  currentLeaseEndDate?: string;
 
   /** Landlord notes the property will likely be listed for sale in the near future. */
   @IsOptional()

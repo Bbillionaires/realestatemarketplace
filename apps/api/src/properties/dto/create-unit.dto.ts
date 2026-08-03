@@ -20,6 +20,12 @@ export class CreateUnitDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(50_000)
+  squareFeet?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
   rentCents?: number;
 
   @IsOptional()

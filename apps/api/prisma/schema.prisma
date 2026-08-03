@@ -42,6 +42,17 @@ enum PropertyType {
   OTHER
 }
 
+enum UtilityType {
+  ELECTRIC
+  WATER
+  GAS
+  TRASH
+  LAWN_SERVICE
+  INTERNET
+  CABLE
+  PARKING
+}
+
 enum ConversationStatus {
   NEW_INQUIRY
   ACTIVE
@@ -347,6 +358,10 @@ model Property {
   isActive         Boolean  @default(true)
   propertyType     PropertyType @default(OTHER)
   acceptsSection8Vouchers Boolean @default(false)
+  amenities        String?
+  utilitiesIncluded UtilityType[] @default([])
+  subleaseAllowed  Boolean  @default(false)
+  currentLeaseEndDate DateTime?
 
   // Landlord-set flags surfaced to prospective/current tenants alongside
   // the standard listing terms.

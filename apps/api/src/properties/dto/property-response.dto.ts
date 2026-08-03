@@ -1,4 +1,4 @@
-import { PropertyType } from '@prisma/client';
+import { PropertyType, UtilityType } from '@prisma/client';
 
 export class UnitResponseDto {
   id!: string;
@@ -47,6 +47,10 @@ export class PropertyResponseDto {
   isActive!: boolean;
   propertyType!: PropertyType;
   acceptsSection8Vouchers!: boolean;
+  amenities!: string | null;
+  utilitiesIncluded!: UtilityType[];
+  subleaseAllowed!: boolean;
+  currentLeaseEndDate!: Date | null;
   sellingSoon!: boolean;
   sellingSoonNote!: string | null;
   rentToOwnAvailable!: boolean;
@@ -81,6 +85,10 @@ export class PropertyResponseDto {
       isActive: boolean;
       propertyType: PropertyType;
       acceptsSection8Vouchers: boolean;
+      amenities: string | null;
+      utilitiesIncluded: UtilityType[];
+      subleaseAllowed: boolean;
+      currentLeaseEndDate: Date | null;
       sellingSoon: boolean;
       sellingSoonNote: string | null;
       rentToOwnAvailable: boolean;
@@ -122,6 +130,10 @@ export class PropertyResponseDto {
     dto.isActive = property.isActive;
     dto.propertyType = property.propertyType;
     dto.acceptsSection8Vouchers = property.acceptsSection8Vouchers;
+    dto.amenities = property.amenities;
+    dto.utilitiesIncluded = property.utilitiesIncluded;
+    dto.subleaseAllowed = property.subleaseAllowed;
+    dto.currentLeaseEndDate = property.currentLeaseEndDate;
     dto.sellingSoon = property.sellingSoon;
     dto.sellingSoonNote = property.sellingSoonNote;
     dto.rentToOwnAvailable = property.rentToOwnAvailable;

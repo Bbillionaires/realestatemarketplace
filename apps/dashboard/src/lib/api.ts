@@ -42,6 +42,7 @@ export interface UnitSummary {
 }
 
 export type PropertyType = 'APARTMENT' | 'HOUSE' | 'CONDO' | 'TOWNHOME' | 'OTHER';
+export type UtilityType = 'ELECTRIC' | 'WATER' | 'GAS' | 'TRASH' | 'LAWN_SERVICE' | 'INTERNET' | 'CABLE' | 'PARKING';
 
 export interface PropertySummary {
   id: string;
@@ -61,6 +62,10 @@ export interface PropertySummary {
   isActive: boolean;
   propertyType: PropertyType;
   acceptsSection8Vouchers: boolean;
+  amenities: string | null;
+  utilitiesIncluded: UtilityType[];
+  subleaseAllowed: boolean;
+  currentLeaseEndDate: string | null;
   sellingSoon: boolean;
   sellingSoonNote: string | null;
   rentToOwnAvailable: boolean;
@@ -75,6 +80,10 @@ export interface PropertySummary {
 export interface UpdatePropertyPayload {
   propertyType?: PropertyType;
   acceptsSection8Vouchers?: boolean;
+  amenities?: string;
+  utilitiesIncluded?: UtilityType[];
+  subleaseAllowed?: boolean;
+  currentLeaseEndDate?: string;
   sellingSoon?: boolean;
   sellingSoonNote?: string;
   rentToOwnAvailable?: boolean;
@@ -97,6 +106,21 @@ export interface CreatePropertyPayload {
   petPolicy?: string;
   propertyType?: PropertyType;
   acceptsSection8Vouchers?: boolean;
+  amenities?: string;
+  utilitiesIncluded?: UtilityType[];
+  subleaseAllowed?: boolean;
+  currentLeaseEndDate?: string;
+  leaseToOwnAvailable?: boolean;
+  sellerFinancingAvailable?: boolean;
+}
+
+export interface CreateUnitPayload {
+  unitLabel: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  squareFeet?: number;
+  rentCents?: number;
+  isAvailable?: boolean;
 }
 
 export interface AgencySummary {
@@ -274,6 +298,14 @@ export const api = {
     request<PropertySummary>('/properties', { method: 'POST', body: JSON.stringify(payload) }, accessToken),
   updateProperty: (accessToken: string, id: string, payload: UpdatePropertyPayload) =>
     request<PropertySummary>(`/properties/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }, accessToken),
+  createUnit: (accessToken: string, propertyId: string, payload: CreateUnitPayload) =>
+    request<UnitSummary>(`/properties/${propertyId}/units`, { method: 'POST', body: JSON.stringify(payload) }, accessToken),
+  updateUnit: (accessToken: string, propertyId: string, unitId: string, payload: Partial<CreateUnitPayload>) =>
+    request<UnitSummary>(
+      `/properties/${propertyId}/units/${unitId}`,
+      { method: 'PATCH', body: JSON.stringify(payload) },
+      accessToken,
+    ),
   listAgencies: (accessToken: string) => request<AgencySummary[]>('/properties/agencies', {}, accessToken),
   getRentEstimate: (accessToken: string, params: { city?: string; state?: string; bedrooms?: number }) => {
     const qs = new URLSearchParams();

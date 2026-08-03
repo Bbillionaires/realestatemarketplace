@@ -260,4 +260,88 @@ describe('Property extras: type/Section8 filters, agencies, rent estimate, waitl
       expect(ownerView.body).toHaveLength(1);
     });
   });
+
+  describe('Amenities, utilities, sublease, and lease end date', () => {
+    it('defaults amenities/utilities/sublease/lease end to empty when not provided', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-extras-default@example.com');
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send(basePayload);
+      expect(created.status).toBe(201);
+      expect(created.body.amenities).toBeNull();
+      expect(created.body.utilitiesIncluded).toEqual([]);
+      expect(created.body.subleaseAllowed).toBe(false);
+      expect(created.body.currentLeaseEndDate).toBeNull();
+    });
+
+    it('persists amenities, utilities covered, sublease allowance, and lease end date', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-extras-set@example.com');
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({
+          ...basePayload,
+          amenities: 'In-unit washer/dryer, pool access, fenced yard',
+          utilitiesIncluded: ['WATER', 'TRASH', 'LAWN_SERVICE'],
+          subleaseAllowed: true,
+          currentLeaseEndDate: '2027-06-01T00:00:00.000Z',
+        });
+      expect(created.status).toBe(201);
+      expect(created.body.amenities).toBe('In-unit washer/dryer, pool access, fenced yard');
+      expect(created.body.utilitiesIncluded.sort()).toEqual(['LAWN_SERVICE', 'TRASH', 'WATER']);
+      expect(created.body.subleaseAllowed).toBe(true);
+      expect(created.body.currentLeaseEndDate).toBe('2027-06-01T00:00:00.000Z');
+    });
+
+    it('rejects an invalid utility type', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-extras-invalid@example.com');
+      const res = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ ...basePayload, utilitiesIncluded: ['WIFI'] });
+      expect(res.status).toBe(400);
+    });
+
+    it('lets the owning landlord update amenities/utilities/sublease/lease end via PATCH', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-extras-update@example.com');
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send(basePayload);
+
+      const updated = await request(app.getHttpServer())
+        .patch(`/api/properties/${created.body.id}`)
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ subleaseAllowed: true, utilitiesIncluded: ['ELECTRIC', 'GAS'] });
+      expect(updated.status).toBe(200);
+      expect(updated.body.subleaseAllowed).toBe(true);
+      expect(updated.body.utilitiesIncluded.sort()).toEqual(['ELECTRIC', 'GAS']);
+    });
+  });
+
+  describe('Unit square footage', () => {
+    it('persists squareFeet on unit create and update (previously not settable at all)', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-sqft@example.com');
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send(basePayload);
+      const propertyId = created.body.id;
+
+      const unit = await request(app.getHttpServer())
+        .post(`/api/properties/${propertyId}/units`)
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ unitLabel: '1', bedrooms: 3, bathrooms: 2, squareFeet: 1450, rentCents: 180000 });
+      expect(unit.status).toBe(201);
+      expect(unit.body.squareFeet).toBe(1450);
+
+      const updatedUnit = await request(app.getHttpServer())
+        .patch(`/api/properties/${propertyId}/units/${unit.body.id}`)
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ squareFeet: 1600 });
+      expect(updatedUnit.status).toBe(200);
+      expect(updatedUnit.body.squareFeet).toBe(1600);
+    });
+  });
 });

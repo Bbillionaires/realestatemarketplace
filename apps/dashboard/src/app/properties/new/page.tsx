@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, PropertyType } from '../../../lib/api';
+import { api, PropertyType, UtilityType } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth-context';
 import { useCurrentUser } from '../../../lib/use-current-user';
 import { theme } from '../../../lib/theme';
@@ -14,6 +14,17 @@ const PROPERTY_TYPE_OPTIONS: { value: PropertyType; label: string }[] = [
   { value: 'CONDO', label: 'Condo' },
   { value: 'TOWNHOME', label: 'Townhome' },
   { value: 'OTHER', label: 'Other' },
+];
+
+const UTILITY_OPTIONS: { value: UtilityType; label: string }[] = [
+  { value: 'ELECTRIC', label: 'Electric' },
+  { value: 'WATER', label: 'Water' },
+  { value: 'GAS', label: 'Gas' },
+  { value: 'TRASH', label: 'Trash' },
+  { value: 'LAWN_SERVICE', label: 'Lawn service' },
+  { value: 'INTERNET', label: 'Internet' },
+  { value: 'CABLE', label: 'Cable' },
+  { value: 'PARKING', label: 'Parking' },
 ];
 
 function dollarsToCents(value: string): number | undefined {
@@ -41,6 +52,15 @@ export default function NewPropertyPage() {
   const [petPolicy, setPetPolicy] = useState('');
   const [propertyType, setPropertyType] = useState<PropertyType>('APARTMENT');
   const [acceptsSection8Vouchers, setAcceptsSection8Vouchers] = useState(false);
+  const [bedrooms, setBedrooms] = useState('');
+  const [bathrooms, setBathrooms] = useState('');
+  const [squareFeet, setSquareFeet] = useState('');
+  const [amenities, setAmenities] = useState('');
+  const [utilitiesIncluded, setUtilitiesIncluded] = useState<UtilityType[]>([]);
+  const [subleaseAllowed, setSubleaseAllowed] = useState(false);
+  const [leaseToOwnAvailable, setLeaseToOwnAvailable] = useState(false);
+  const [sellerFinancingAvailable, setSellerFinancingAvailable] = useState(false);
+  const [currentLeaseEndMonth, setCurrentLeaseEndMonth] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -56,6 +76,10 @@ export default function NewPropertyPage() {
     fontFamily: 'inherit',
   };
   const labelStyle = { display: 'block', marginBottom: 14, fontSize: 13, color: theme.textMuted, fontWeight: 600 };
+
+  function toggleUtility(value: UtilityType) {
+    setUtilitiesIncluded((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -76,7 +100,27 @@ export default function NewPropertyPage() {
         petPolicy: petPolicy || undefined,
         propertyType,
         acceptsSection8Vouchers,
+        amenities: amenities || undefined,
+        utilitiesIncluded: utilitiesIncluded.length > 0 ? utilitiesIncluded : undefined,
+        subleaseAllowed,
+        leaseToOwnAvailable,
+        sellerFinancingAvailable,
+        currentLeaseEndDate: currentLeaseEndMonth ? `${currentLeaseEndMonth}-01T00:00:00.000Z` : undefined,
       });
+
+      const bedroomsNum = bedrooms.trim() ? parseInt(bedrooms, 10) : undefined;
+      const bathroomsNum = bathrooms.trim() ? parseFloat(bathrooms) : undefined;
+      const squareFeetNum = squareFeet.trim() ? parseInt(squareFeet, 10) : undefined;
+      if (bedroomsNum !== undefined || bathroomsNum !== undefined || squareFeetNum !== undefined) {
+        await api.createUnit(accessToken, created.id, {
+          unitLabel: '1',
+          bedrooms: bedroomsNum,
+          bathrooms: bathroomsNum,
+          squareFeet: squareFeetNum,
+          rentCents: dollarsToCents(monthlyRent),
+        });
+      }
+
       router.push(`/properties/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create listing');
@@ -115,7 +159,7 @@ export default function NewPropertyPage() {
       <div style={{ maxWidth: 560, margin: '0 auto', padding: 24 }}>
         <h1 style={{ fontSize: 22, color: theme.text, marginBottom: 4 }}>List Your Property</h1>
         <p style={{ color: theme.textMuted, fontSize: 14, marginTop: 0, marginBottom: 20 }}>
-          Add a new rental listing. You can add units, photos, and additional listing options after it's created.
+          Add a new rental listing. You can add photos and additional listing options after it's created.
         </p>
 
         <form
@@ -178,6 +222,45 @@ export default function NewPropertyPage() {
               />
             </label>
           </div>
+
+          <div style={{ display: 'flex', gap: 12 }}>
+            <label style={{ ...labelStyle, flex: 1 }}>
+              Bedrooms
+              <input
+                type="number"
+                min={0}
+                max={20}
+                step="1"
+                value={bedrooms}
+                onChange={(e) => setBedrooms(e.target.value)}
+                style={inputStyle}
+              />
+            </label>
+            <label style={{ ...labelStyle, flex: 1 }}>
+              Bathrooms
+              <input
+                type="number"
+                min={0}
+                max={20}
+                step="0.5"
+                value={bathrooms}
+                onChange={(e) => setBathrooms(e.target.value)}
+                style={inputStyle}
+              />
+            </label>
+            <label style={{ ...labelStyle, flex: 1 }}>
+              Square feet
+              <input
+                type="number"
+                min={0}
+                step="1"
+                value={squareFeet}
+                onChange={(e) => setSquareFeet(e.target.value)}
+                style={inputStyle}
+              />
+            </label>
+          </div>
+
           <label style={labelStyle}>
             Property type
             <select value={propertyType} onChange={(e) => setPropertyType(e.target.value as PropertyType)} style={inputStyle}>
@@ -193,6 +276,17 @@ export default function NewPropertyPage() {
             <input value={petPolicy} onChange={(e) => setPetPolicy(e.target.value)} maxLength={300} style={inputStyle} />
           </label>
           <label style={labelStyle}>
+            Amenities (optional)
+            <textarea
+              value={amenities}
+              onChange={(e) => setAmenities(e.target.value)}
+              placeholder="e.g. in-unit washer/dryer, pool access, fenced yard"
+              rows={2}
+              maxLength={500}
+              style={inputStyle}
+            />
+          </label>
+          <label style={labelStyle}>
             Description (optional)
             <textarea
               value={description}
@@ -202,13 +296,66 @@ export default function NewPropertyPage() {
               style={inputStyle}
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18, fontSize: 14 }}>
+
+          <div style={{ marginBottom: 18 }}>
+            <span style={{ display: 'block', marginBottom: 8, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
+              Utilities covered by landlord
+            </span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              {UTILITY_OPTIONS.map((opt) => (
+                <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+                  <input
+                    type="checkbox"
+                    checked={utilitiesIncluded.includes(opt.value)}
+                    onChange={() => toggleUtility(opt.value)}
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <label style={labelStyle}>
+            Current lease end date, if occupied (optional)
+            <input
+              type="month"
+              value={currentLeaseEndMonth}
+              onChange={(e) => setCurrentLeaseEndMonth(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
             <input
               type="checkbox"
               checked={acceptsSection8Vouchers}
               onChange={(e) => setAcceptsSection8Vouchers(e.target.checked)}
             />
             This property accepts Section 8 housing vouchers
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={subleaseAllowed}
+              onChange={(e) => setSubleaseAllowed(e.target.checked)}
+            />
+            Subleasing is allowed
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={leaseToOwnAvailable}
+              onChange={(e) => setLeaseToOwnAvailable(e.target.checked)}
+            />
+            Lease option (lease-to-own) available
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={sellerFinancingAvailable}
+              onChange={(e) => setSellerFinancingAvailable(e.target.checked)}
+            />
+            Seller financing available
           </label>
 
           {error && (
