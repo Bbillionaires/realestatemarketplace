@@ -286,7 +286,7 @@ export class PropertiesService {
 
   private async canManage(
     actor: AuthenticatedUser | null,
-    property: { ownerId: string; managerAssignments?: { userId: string; revokedAt: Date | null }[] },
+    property: { id: string; ownerId: string; managerAssignments?: { userId: string; revokedAt: Date | null }[] },
   ): Promise<boolean> {
     if (!actor) return false;
     if (STAFF_ROLES.includes(actor.role)) return true;
@@ -294,15 +294,19 @@ export class PropertiesService {
     if (property.managerAssignments) {
       return property.managerAssignments.some((a) => a.userId === actor.id && !a.revokedAt);
     }
+    // No managerAssignments included on this fetch — fall back to a direct,
+    // property-scoped query rather than "does this user manage *anything*"
+    // (which would wrongly grant access to every property a manager is
+    // assigned to, not just this one).
     const assignment = await this.prisma.propertyManagerAssignment.findFirst({
-      where: { userId: actor.id, revokedAt: null },
+      where: { propertyId: property.id, userId: actor.id, revokedAt: null },
     });
     return !!assignment;
   }
 
   private async assertCanManage(
     actor: AuthenticatedUser,
-    property: { ownerId: string; managerAssignments?: { userId: string; revokedAt: Date | null }[] },
+    property: { id: string; ownerId: string; managerAssignments?: { userId: string; revokedAt: Date | null }[] },
   ): Promise<void> {
     const allowed = await this.canManage(actor, property);
     if (!allowed) {
