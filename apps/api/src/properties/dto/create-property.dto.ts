@@ -1,8 +1,10 @@
 import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
-import { PropertyType, UtilityType } from '@prisma/client';
+import { PropertyType, SewerSourceType, UtilityType, WaterSourceType } from '@prisma/client';
 
 const PROPERTY_TYPES = Object.values(PropertyType);
 const UTILITY_TYPES = Object.values(UtilityType);
+const SEWER_SOURCE_TYPES = Object.values(SewerSourceType);
+const WATER_SOURCE_TYPES = Object.values(WaterSourceType);
 
 export class CreatePropertyDto {
   @IsString()
@@ -71,6 +73,22 @@ export class CreatePropertyDto {
   @IsArray()
   @IsIn(UTILITY_TYPES, { each: true })
   utilitiesIncluded?: UtilityType[];
+
+  @IsOptional()
+  @IsIn(SEWER_SOURCE_TYPES)
+  sewerSource?: SewerSourceType;
+
+  @IsOptional()
+  @IsIn(WATER_SOURCE_TYPES)
+  waterSource?: WaterSourceType;
+
+  @IsOptional()
+  @IsBoolean()
+  landlordPaysElectricity?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  landlordPaysWater?: boolean;
 
   /** Landlord allows the tenant to sublease the unit to another party. */
   @IsOptional()

@@ -62,6 +62,8 @@ export interface UnitSummary {
 
 export type PropertyType = 'APARTMENT' | 'HOUSE' | 'CONDO' | 'TOWNHOME' | 'OTHER';
 export type UtilityType = 'ELECTRIC' | 'WATER' | 'GAS' | 'TRASH' | 'LAWN_SERVICE' | 'INTERNET' | 'CABLE' | 'PARKING';
+export type SewerSourceType = 'CITY_SEWER' | 'SEPTIC';
+export type WaterSourceType = 'CITY_WATER' | 'WELL';
 
 export interface PropertySummary {
   id: string;
@@ -83,6 +85,10 @@ export interface PropertySummary {
   acceptsSection8Vouchers: boolean;
   amenities: string | null;
   utilitiesIncluded: UtilityType[];
+  sewerSource: SewerSourceType | null;
+  waterSource: WaterSourceType | null;
+  landlordPaysElectricity: boolean;
+  landlordPaysWater: boolean;
   subleaseAllowed: boolean;
   currentLeaseEndDate: string | null;
   sellingSoon: boolean;
@@ -101,6 +107,10 @@ export interface UpdatePropertyPayload {
   acceptsSection8Vouchers?: boolean;
   amenities?: string;
   utilitiesIncluded?: UtilityType[];
+  sewerSource?: SewerSourceType;
+  waterSource?: WaterSourceType;
+  landlordPaysElectricity?: boolean;
+  landlordPaysWater?: boolean;
   subleaseAllowed?: boolean;
   currentLeaseEndDate?: string;
   sellingSoon?: boolean;
@@ -127,6 +137,10 @@ export interface CreatePropertyPayload {
   acceptsSection8Vouchers?: boolean;
   amenities?: string;
   utilitiesIncluded?: UtilityType[];
+  sewerSource?: SewerSourceType;
+  waterSource?: WaterSourceType;
+  landlordPaysElectricity?: boolean;
+  landlordPaysWater?: boolean;
   subleaseAllowed?: boolean;
   currentLeaseEndDate?: string;
   leaseToOwnAvailable?: boolean;
@@ -332,6 +346,21 @@ export interface AdminNoteSummary {
   createdAt: string;
 }
 
+export type IdSubmissionStatus = 'AWAITING_PAYMENT' | 'PAID' | 'SUBMITTED' | 'CANCELLED';
+
+export interface IdSubmissionSummary {
+  id: string;
+  conversationId: string;
+  feeCents: number;
+  status: IdSubmissionStatus;
+  checkoutUrl: string | null;
+  paidAt: string | null;
+  submittedFileName: string | null;
+  emailSent: boolean;
+  submittedAt: string | null;
+  createdAt: string;
+}
+
 export interface StartConversationResult {
   conversation: ConversationSummary;
   message: MessageSummary;
@@ -524,4 +553,26 @@ export const api = {
   },
   declineLenderRequest: (accessToken: string, requestId: string) =>
     request<LenderRequest>(`/lenders/requests/${requestId}/decline`, { method: 'PATCH' }, accessToken),
+  listIdSubmissions: (accessToken: string, conversationId: string) =>
+    request<IdSubmissionSummary[]>(`/conversations/${conversationId}/id-submissions`, {}, accessToken),
+  createIdSubmission: (accessToken: string, conversationId: string) =>
+    request<IdSubmissionSummary>(
+      `/conversations/${conversationId}/id-submissions`,
+      { method: 'POST', body: JSON.stringify({}) },
+      accessToken,
+    ),
+  cancelIdSubmission: (accessToken: string, id: string) =>
+    request<IdSubmissionSummary>(`/id-submissions/${id}/cancel`, { method: 'PATCH' }, accessToken),
+  submitIdSubmission: (accessToken: string, id: string, file: File, note?: string) => {
+    const formData = new FormData();
+    if (note) formData.set('note', note);
+    formData.set('file', file);
+    return requestMultipart<IdSubmissionSummary>(`/id-submissions/${id}/submit`, formData, accessToken);
+  },
+  /** Dev/test only — stands in for the real payment processor calling our webhook after a completed charge. */
+  simulateMockPayment: (providerOrderId: string) =>
+    request<{ status: string }>('/payments/webhooks', {
+      method: 'POST',
+      body: JSON.stringify({ providerOrderId, paid: true }),
+    }),
 };

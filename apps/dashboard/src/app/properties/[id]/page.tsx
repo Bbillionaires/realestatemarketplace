@@ -3,7 +3,15 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, PropertySummary, UpdatePropertyPayload, UtilityType, WaitlistEntry } from '../../../lib/api';
+import {
+  api,
+  PropertySummary,
+  SewerSourceType,
+  UpdatePropertyPayload,
+  UtilityType,
+  WaitlistEntry,
+  WaterSourceType,
+} from '../../../lib/api';
 import { useAuth } from '../../../lib/auth-context';
 import { useCurrentUser } from '../../../lib/use-current-user';
 import { formatMoney, primaryUnit } from '../../../lib/format';
@@ -22,11 +30,11 @@ const LISTING_OPTIONS: { flag: keyof UpdatePropertyPayload; label: string; hint:
   { flag: 'workForRentAvailable', label: 'Work for Rent', hint: 'Willing to exchange labor/work for reduced or free rent.' },
   { flag: 'tenantSwapAllowed', label: 'Tenant Swap Allowed', hint: 'Current tenant may swap leases with an equally qualified tenant.' },
   { flag: 'subleaseAllowed', label: 'Subleasing Allowed', hint: 'Tenant may sublease the unit to another party.' },
+  { flag: 'landlordPaysElectricity', label: 'Landlord Pays Electricity', hint: 'Electric bill is covered by the landlord, not the tenant.' },
+  { flag: 'landlordPaysWater', label: 'Landlord Pays Water', hint: 'Water bill is covered by the landlord, not the tenant.' },
 ];
 
 const UTILITY_OPTIONS: { value: UtilityType; label: string }[] = [
-  { value: 'ELECTRIC', label: 'Electric' },
-  { value: 'WATER', label: 'Water' },
   { value: 'GAS', label: 'Gas' },
   { value: 'TRASH', label: 'Trash' },
   { value: 'LAWN_SERVICE', label: 'Lawn service' },
@@ -142,6 +150,10 @@ export default function PropertyDetailPage() {
       acceptsSection8Vouchers: property.acceptsSection8Vouchers,
       amenities: property.amenities ?? '',
       utilitiesIncluded: property.utilitiesIncluded,
+      sewerSource: property.sewerSource ?? undefined,
+      waterSource: property.waterSource ?? undefined,
+      landlordPaysElectricity: property.landlordPaysElectricity,
+      landlordPaysWater: property.landlordPaysWater,
       subleaseAllowed: property.subleaseAllowed,
       currentLeaseEndDate: toMonthInput(property.currentLeaseEndDate),
       sellingSoon: property.sellingSoon,
@@ -373,13 +385,33 @@ export default function PropertyDetailPage() {
                     <dd style={{ margin: 0 }}>{property.petPolicy ?? 'Not specified'}</dd>
                     <dt style={{ color: theme.textMuted }}>Amenities</dt>
                     <dd style={{ margin: 0 }}>{property.amenities ?? 'Not specified'}</dd>
-                    <dt style={{ color: theme.textMuted }}>Utilities covered by landlord</dt>
+                    <dt style={{ color: theme.textMuted }}>Sewer</dt>
+                    <dd style={{ margin: 0 }}>
+                      {property.sewerSource === 'CITY_SEWER'
+                        ? 'City sewer'
+                        : property.sewerSource === 'SEPTIC'
+                          ? 'Septic'
+                          : 'Not specified'}
+                    </dd>
+                    <dt style={{ color: theme.textMuted }}>Water source</dt>
+                    <dd style={{ margin: 0 }}>
+                      {property.waterSource === 'CITY_WATER'
+                        ? 'City water'
+                        : property.waterSource === 'WELL'
+                          ? 'Well'
+                          : 'Not specified'}
+                    </dd>
+                    <dt style={{ color: theme.textMuted }}>Electricity</dt>
+                    <dd style={{ margin: 0 }}>{property.landlordPaysElectricity ? 'Paid by landlord' : 'Paid by tenant'}</dd>
+                    <dt style={{ color: theme.textMuted }}>Water bill</dt>
+                    <dd style={{ margin: 0 }}>{property.landlordPaysWater ? 'Paid by landlord' : 'Paid by tenant'}</dd>
+                    <dt style={{ color: theme.textMuted }}>Other utilities covered by landlord</dt>
                     <dd style={{ margin: 0 }}>
                       {property.utilitiesIncluded.length > 0
                         ? property.utilitiesIncluded
                             .map((u) => UTILITY_OPTIONS.find((o) => o.value === u)?.label ?? u)
                             .join(', ')
-                        : 'None — tenant covers all utilities'}
+                        : 'None'}
                     </dd>
                     <dt style={{ color: theme.textMuted }}>Subleasing</dt>
                     <dd style={{ margin: 0 }}>{property.subleaseAllowed ? 'Allowed' : 'Not allowed'}</dd>
@@ -558,9 +590,40 @@ export default function PropertyDetailPage() {
                   />
                 </div>
 
+                <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Sewer</label>
+                    <select
+                      value={editForm.sewerSource ?? ''}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, sewerSource: (e.target.value || undefined) as SewerSourceType | undefined }))
+                      }
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 14 }}
+                    >
+                      <option value="">Not specified</option>
+                      <option value="CITY_SEWER">City sewer</option>
+                      <option value="SEPTIC">Septic</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Water source</label>
+                    <select
+                      value={editForm.waterSource ?? ''}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, waterSource: (e.target.value || undefined) as WaterSourceType | undefined }))
+                      }
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 14 }}
+                    >
+                      <option value="">Not specified</option>
+                      <option value="CITY_WATER">City water</option>
+                      <option value="WELL">Well</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-                    Utilities covered by landlord
+                    Other utilities covered by landlord
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     {UTILITY_OPTIONS.map((opt) => (

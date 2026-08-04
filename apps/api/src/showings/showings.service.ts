@@ -1,10 +1,13 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ConversationStatus, Role, ShowingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { EMAIL_PROVIDER } from '../email/email.constants';
+import { EmailProvider } from '../email/interfaces/email-provider.interface';
 import { ProposeShowingDto } from './dto/propose-showing.dto';
 import { ShowingResponseDto } from './dto/showing-response.dto';
+import { buildShowingIcs } from './ics.util';
 
 const STAFF_ROLES: Role[] = [Role.STAFF_MODERATOR, Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR];
 const OPEN_SHOWING_STATUSES: ShowingStatus[] = [
@@ -20,6 +23,7 @@ export class ShowingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtimeGateway: RealtimeGateway,
+    @Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider,
   ) {}
 
   async propose(actor: AuthenticatedUser, conversationId: string, dto: ProposeShowingDto): Promise<ShowingResponseDto> {
@@ -113,6 +117,8 @@ export class ShowingsService {
       where: { id: showingId },
       include: SHOWING_INCLUDE,
     });
+
+    await this.sendCalendarInvites(conversationId, showingId, slot.startTime, updated.durationMinutes);
     const responseDto = ShowingResponseDto.from(updated);
     this.realtimeGateway.emitShowingUpdated(conversationId, responseDto);
     return responseDto;
@@ -157,6 +163,47 @@ export class ShowingsService {
     const responseDto = ShowingResponseDto.from(updated);
     this.realtimeGateway.emitShowingUpdated(conversationId, responseDto);
     return responseDto;
+  }
+
+  private async sendCalendarInvites(
+    conversationId: string,
+    showingId: string,
+    startTime: Date,
+    durationMinutes: number,
+  ): Promise<void> {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: {
+        property: { select: { title: true, addressLine1: true, city: true, state: true } },
+        tenant: { select: { email: true } },
+        landlord: { select: { email: true } },
+      },
+    });
+    if (!conversation) return;
+
+    const endTime = new Date(startTime.getTime() + durationMinutes * 60_000);
+    const location = `${conversation.property.addressLine1}, ${conversation.property.city}, ${conversation.property.state}`;
+    const ics = buildShowingIcs({
+      uid: showingId,
+      startTime,
+      endTime,
+      summary: `Showing: ${conversation.property.title}`,
+      description: `Property tour for ${conversation.property.title}, scheduled through Affordable Home Match.`,
+      location,
+    });
+    const attachments = [{ filename: 'showing.ics', content: ics, contentType: 'text/calendar' }];
+
+    const recipients = [conversation.tenant.email, conversation.landlord.email].filter(Boolean);
+    await Promise.all(
+      recipients.map((to) =>
+        this.emailProvider.sendEmail({
+          to,
+          subject: `Showing scheduled: ${conversation.property.title}`,
+          text: `Your showing at ${location} is confirmed for ${startTime.toLocaleString('en-US', { timeZone: 'UTC' })} UTC. A calendar invite is attached.`,
+          attachments,
+        }),
+      ),
+    );
   }
 
   private async assertParticipant(actor: AuthenticatedUser, conversationId: string) {

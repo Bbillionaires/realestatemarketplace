@@ -1,4 +1,4 @@
-import { PropertyType, UtilityType } from '@prisma/client';
+import { PropertyType, SewerSourceType, UtilityType, WaterSourceType } from '@prisma/client';
 
 export class UnitResponseDto {
   id!: string;
@@ -49,6 +49,10 @@ export class PropertyResponseDto {
   acceptsSection8Vouchers!: boolean;
   amenities!: string | null;
   utilitiesIncluded!: UtilityType[];
+  sewerSource!: SewerSourceType | null;
+  waterSource!: WaterSourceType | null;
+  landlordPaysElectricity!: boolean;
+  landlordPaysWater!: boolean;
   subleaseAllowed!: boolean;
   currentLeaseEndDate!: Date | null;
   sellingSoon!: boolean;
@@ -87,6 +91,10 @@ export class PropertyResponseDto {
       acceptsSection8Vouchers: boolean;
       amenities: string | null;
       utilitiesIncluded: UtilityType[];
+      sewerSource: SewerSourceType | null;
+      waterSource: WaterSourceType | null;
+      landlordPaysElectricity: boolean;
+      landlordPaysWater: boolean;
       subleaseAllowed: boolean;
       currentLeaseEndDate: Date | null;
       sellingSoon: boolean;
@@ -132,6 +140,10 @@ export class PropertyResponseDto {
     dto.acceptsSection8Vouchers = property.acceptsSection8Vouchers;
     dto.amenities = property.amenities;
     dto.utilitiesIncluded = property.utilitiesIncluded;
+    dto.sewerSource = property.sewerSource;
+    dto.waterSource = property.waterSource;
+    dto.landlordPaysElectricity = property.landlordPaysElectricity;
+    dto.landlordPaysWater = property.landlordPaysWater;
     dto.subleaseAllowed = property.subleaseAllowed;
     dto.currentLeaseEndDate = property.currentLeaseEndDate;
     dto.sellingSoon = property.sellingSoon;

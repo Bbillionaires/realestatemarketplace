@@ -17,6 +17,14 @@ export interface AppConfig {
     apiKey: string;
     fromAddress: string;
   };
+  paymentProvider: 'mock' | 'square';
+  square: {
+    accessToken: string;
+    locationId: string;
+    environment: 'sandbox' | 'production';
+    webhookSignatureKey: string;
+  };
+  idSubmissionFeeCents: number;
   twilio: {
     accountSid: string;
     authToken: string;
@@ -57,6 +65,14 @@ export default (): AppConfig => ({
     apiKey: process.env.RESEND_API_KEY ?? '',
     fromAddress: process.env.RESEND_FROM_ADDRESS ?? 'notifications@affordablehomematch.com',
   },
+  paymentProvider: (process.env.PAYMENT_PROVIDER as 'mock' | 'square') ?? 'mock',
+  square: {
+    accessToken: process.env.SQUARE_ACCESS_TOKEN ?? '',
+    locationId: process.env.SQUARE_LOCATION_ID ?? '',
+    environment: (process.env.SQUARE_ENVIRONMENT as 'sandbox' | 'production') ?? 'sandbox',
+    webhookSignatureKey: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY ?? '',
+  },
+  idSubmissionFeeCents: parseInt(process.env.ID_SUBMISSION_FEE_CENTS ?? '500', 10),
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
     authToken: process.env.TWILIO_AUTH_TOKEN ?? '',

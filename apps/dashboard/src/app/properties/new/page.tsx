@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, PropertyType, UtilityType } from '../../../lib/api';
+import { api, PropertyType, SewerSourceType, UtilityType, WaterSourceType } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth-context';
 import { useCurrentUser } from '../../../lib/use-current-user';
 import { theme } from '../../../lib/theme';
@@ -16,9 +16,9 @@ const PROPERTY_TYPE_OPTIONS: { value: PropertyType; label: string }[] = [
   { value: 'OTHER', label: 'Other' },
 ];
 
+// Electric and water are asked about separately below (sewer/water source and
+// who pays), so they're left out of this general checklist to avoid asking twice.
 const UTILITY_OPTIONS: { value: UtilityType; label: string }[] = [
-  { value: 'ELECTRIC', label: 'Electric' },
-  { value: 'WATER', label: 'Water' },
   { value: 'GAS', label: 'Gas' },
   { value: 'TRASH', label: 'Trash' },
   { value: 'LAWN_SERVICE', label: 'Lawn service' },
@@ -57,6 +57,10 @@ export default function NewPropertyPage() {
   const [squareFeet, setSquareFeet] = useState('');
   const [amenities, setAmenities] = useState('');
   const [utilitiesIncluded, setUtilitiesIncluded] = useState<UtilityType[]>([]);
+  const [sewerSource, setSewerSource] = useState<SewerSourceType | ''>('');
+  const [waterSource, setWaterSource] = useState<WaterSourceType | ''>('');
+  const [landlordPaysElectricity, setLandlordPaysElectricity] = useState(false);
+  const [landlordPaysWater, setLandlordPaysWater] = useState(false);
   const [subleaseAllowed, setSubleaseAllowed] = useState(false);
   const [leaseToOwnAvailable, setLeaseToOwnAvailable] = useState(false);
   const [sellerFinancingAvailable, setSellerFinancingAvailable] = useState(false);
@@ -102,6 +106,10 @@ export default function NewPropertyPage() {
         acceptsSection8Vouchers,
         amenities: amenities || undefined,
         utilitiesIncluded: utilitiesIncluded.length > 0 ? utilitiesIncluded : undefined,
+        sewerSource: sewerSource || undefined,
+        waterSource: waterSource || undefined,
+        landlordPaysElectricity,
+        landlordPaysWater,
         subleaseAllowed,
         leaseToOwnAvailable,
         sellerFinancingAvailable,
@@ -297,9 +305,52 @@ export default function NewPropertyPage() {
             />
           </label>
 
+          <div style={{ display: 'flex', gap: 12 }}>
+            <label style={{ ...labelStyle, flex: 1 }}>
+              Sewer
+              <select
+                value={sewerSource}
+                onChange={(e) => setSewerSource(e.target.value as SewerSourceType | '')}
+                style={inputStyle}
+              >
+                <option value="">Not specified</option>
+                <option value="CITY_SEWER">City sewer</option>
+                <option value="SEPTIC">Septic</option>
+              </select>
+            </label>
+            <label style={{ ...labelStyle, flex: 1 }}>
+              Water source
+              <select
+                value={waterSource}
+                onChange={(e) => setWaterSource(e.target.value as WaterSourceType | '')}
+                style={inputStyle}
+              >
+                <option value="">Not specified</option>
+                <option value="CITY_WATER">City water</option>
+                <option value="WELL">Well</option>
+              </select>
+            </label>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={landlordPaysElectricity}
+              onChange={(e) => setLandlordPaysElectricity(e.target.checked)}
+            />
+            Landlord pays electricity
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={landlordPaysWater}
+              onChange={(e) => setLandlordPaysWater(e.target.checked)}
+            />
+            Landlord pays water
+          </label>
+
           <div style={{ marginBottom: 18 }}>
             <span style={{ display: 'block', marginBottom: 8, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
-              Utilities covered by landlord
+              Other utilities covered by landlord
             </span>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
               {UTILITY_OPTIONS.map((opt) => (

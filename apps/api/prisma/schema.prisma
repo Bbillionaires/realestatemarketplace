@@ -65,6 +65,16 @@ enum UtilityType {
   PARKING
 }
 
+enum SewerSourceType {
+  CITY_SEWER
+  SEPTIC
+}
+
+enum WaterSourceType {
+  CITY_WATER
+  WELL
+}
+
 enum ConversationStatus {
   NEW_INQUIRY
   ACTIVE
@@ -202,6 +212,13 @@ enum ShowingStatus {
   CANCELLED
   COMPLETED
   NO_SHOW
+}
+
+enum IdSubmissionStatus {
+  AWAITING_PAYMENT
+  PAID
+  SUBMITTED
+  CANCELLED
 }
 
 enum ConsentType {
@@ -387,6 +404,15 @@ model Property {
   acceptsSection8Vouchers Boolean @default(false)
   amenities        String?
   utilitiesIncluded UtilityType[] @default([])
+
+  // Separate, specific utility facts — kept distinct from the generic
+  // utilitiesIncluded checklist above rather than folded into it, since
+  // these are yes/no facts a tenant screens on individually.
+  sewerSource              SewerSourceType?
+  waterSource              WaterSourceType?
+  landlordPaysElectricity  Boolean @default(false)
+  landlordPaysWater        Boolean @default(false)
+
   subleaseAllowed  Boolean  @default(false)
   currentLeaseEndDate DateTime?
 
@@ -532,6 +558,7 @@ model Conversation {
   messages         Message[]
   relayAssignments RelayAssignment[]
   showings         Showing[]
+  idSubmissions    IdSubmission[]
   applications     Application[]
   leases           Lease[]
   contactReleases  ContactRelease[]
@@ -681,6 +708,32 @@ model ShowingTimeSlot {
   createdAt  DateTime @default(now())
 
   @@index([showingId])
+}
+
+// A tenant's paid ID submission for a conversation: a $5 convenience fee
+// gates the tenant actually attaching an ID file, which — once paid — is
+// forwarded straight through as an email attachment to whoever is currently
+// responsible for the conversation (conversation.landlordId, i.e. the
+// assigned property manager/realtor if one exists, otherwise the owner) and
+// never persisted here, matching the LenderPaymentRequest pattern.
+model IdSubmission {
+  id                String             @id @default(uuid())
+  conversationId    String
+  conversation      Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  feeCents          Int                @default(500)
+  status            IdSubmissionStatus @default(AWAITING_PAYMENT)
+  paymentProviderCheckoutId String?
+  paymentOrderId    String?
+  checkoutUrl       String?
+  paidAt            DateTime?
+  submittedFileName String?
+  emailSent         Boolean            @default(false)
+  submittedAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([conversationId])
+  @@index([paymentOrderId])
 }
 
 // ---------------------------------------------------------------------------

@@ -263,4 +263,86 @@ describe('Properties (e2e)', () => {
       .send({ sellingSoon: true });
     expect(res.status).toBe(403);
   });
+
+  it('defaults sewer/water source to null and landlord-pays flags to false when not provided', async () => {
+    const landlordToken = await registerUser('LANDLORD', 'landlord-utilities-default@example.com');
+
+    const created = await request(app.getHttpServer())
+      .post('/api/properties')
+      .set('Authorization', `Bearer ${landlordToken}`)
+      .send(propertyPayload);
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      sewerSource: null,
+      waterSource: null,
+      landlordPaysElectricity: false,
+      landlordPaysWater: false,
+    });
+  });
+
+  it('persists sewer/water source and landlord-pays flags on create and exposes them to prospective tenants', async () => {
+    const landlordToken = await registerUser('LANDLORD', 'landlord-utilities-create@example.com');
+    const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-utilities-create@example.com');
+
+    const created = await request(app.getHttpServer())
+      .post('/api/properties')
+      .set('Authorization', `Bearer ${landlordToken}`)
+      .send({
+        ...propertyPayload,
+        sewerSource: 'SEPTIC',
+        waterSource: 'WELL',
+        landlordPaysElectricity: true,
+        landlordPaysWater: true,
+      });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      sewerSource: 'SEPTIC',
+      waterSource: 'WELL',
+      landlordPaysElectricity: true,
+      landlordPaysWater: true,
+    });
+
+    const asTenant = await request(app.getHttpServer())
+      .get(`/api/properties/${created.body.id}`)
+      .set('Authorization', `Bearer ${tenantToken}`);
+    expect(asTenant.status).toBe(200);
+    expect(asTenant.body).toMatchObject({
+      sewerSource: 'SEPTIC',
+      waterSource: 'WELL',
+      landlordPaysElectricity: true,
+      landlordPaysWater: true,
+    });
+  });
+
+  it('lets the owning landlord update sewer/water source and landlord-pays flags via PATCH', async () => {
+    const landlordToken = await registerUser('LANDLORD', 'landlord-utilities-update@example.com');
+
+    const created = await request(app.getHttpServer())
+      .post('/api/properties')
+      .set('Authorization', `Bearer ${landlordToken}`)
+      .send(propertyPayload);
+    const propertyId = created.body.id;
+
+    const updated = await request(app.getHttpServer())
+      .patch(`/api/properties/${propertyId}`)
+      .set('Authorization', `Bearer ${landlordToken}`)
+      .send({ sewerSource: 'CITY_SEWER', waterSource: 'CITY_WATER', landlordPaysElectricity: true });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({
+      sewerSource: 'CITY_SEWER',
+      waterSource: 'CITY_WATER',
+      landlordPaysElectricity: true,
+      landlordPaysWater: false,
+    });
+  });
+
+  it('rejects an invalid sewer/water source value', async () => {
+    const landlordToken = await registerUser('LANDLORD', 'landlord-utilities-invalid@example.com');
+
+    const res = await request(app.getHttpServer())
+      .post('/api/properties')
+      .set('Authorization', `Bearer ${landlordToken}`)
+      .send({ ...propertyPayload, sewerSource: 'MOAT' });
+    expect(res.status).toBe(400);
+  });
 });

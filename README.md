@@ -25,6 +25,7 @@ phone number.
 | Cache / queues / rate limits | **Redis** (rate limits + SMS routing-menu state now; BullMQ queues land in Phase 5) |
 | Dashboard | **Next.js** (App Router) |
 | SMS | Provider-agnostic `SmsProvider` interface; Mock provider now, Twilio/Telnyx implementations are a drop-in for Phase 5 |
+| Payments | Provider-agnostic `PaymentProvider` interface (hosted checkout + webhook); Mock provider now, Square (Payment Links API, supports Cash App Pay) is the configured real processor |
 | Auth | JWT access tokens + rotating opaque refresh tokens, Argon2id password hashing |
 | Containerization | Docker + Docker Compose |
 
@@ -48,7 +49,13 @@ apps/
                          history split-detection + AI-fallback layer (pluggable, mocked), violation
                          escalation, and the moderator-facing admin API (flags/violations/
                          restrictions/admin notes)
-      showings/          Showing/tour time-slot proposal + accept + cancel, nested under a conversation
+      showings/          Showing/tour time-slot proposal + accept + cancel, nested under a conversation;
+                         emails both sides a .ics calendar invite once a slot is accepted
+      id-submissions/    Tenant pays a $5 convenience fee (PaymentProvider checkout), then submits an
+                         ID file that's emailed straight through to whoever currently handles the
+                         conversation (owner or assigned property manager) and never persisted
+      payments/          PaymentProvider interface, Mock provider, Square provider (Payment Links API
+                         + webhook signature verification)
       realtime/          Socket.IO gateway broadcasting new messages / conversation / showing updates
       sms/               SmsProvider interface, Mock provider, inbound/delivery webhooks, routing
       audit/             AuditLog service + admin endpoint
@@ -63,6 +70,8 @@ apps/
     src/app/conversations/[id]/   Message thread + reply box, showing panel, live Socket.IO updates (polling only as a fallback)
     src/app/moderation/           Staff-only moderator dashboard: flag queue, review, violation/restriction history, admin notes, account suspend/restore, and an admin-only per-moderator suspend-permission toggle
     src/components/ShowingPanel.tsx  Propose/accept/cancel a showing time slot from the thread
+    src/components/IdSubmissionPanel.tsx  Pay the $5 fee, then submit an ID file, from the thread
+    src/app/mock-checkout/         Dev-only stand-in for Square's hosted checkout page (PAYMENT_PROVIDER=mock)
     src/lib/use-conversation-socket.ts  Socket.IO client hook used by the conversation thread
 docker/
 docs/
@@ -213,6 +222,17 @@ history-split case added to `test/conversations.e2e-spec.ts`) —
   revokes it — while an admin can suspend/restore any account (and reverse a moderator's action)
   unconditionally, with every grant/revoke/suspend/restore recorded in the audit log.
 
+**Showings + ID submissions** (`test/showings.e2e-spec.ts`, `test/id-submissions.e2e-spec.ts`) —
+- **Showings**: only conversation participants can propose/view a showing; a past start time is
+  rejected; accepting a slot schedules the showing and emails both the tenant and the current
+  landlord-side contact a `.ics` calendar invite (asserted via the mock email provider's attachment
+  filenames).
+- **ID submissions**: only the conversation's tenant can start one; a duplicate call reuses the
+  existing open submission instead of creating another; submitting is rejected until the $5 fee
+  shows paid; a payment webhook with an unrecognized order ID is a no-op; once paid, submitting
+  emails the ID file straight to the landlord-side contact and is rejected a second time; the
+  tenant can cancel an unpaid submission.
+
 ## API surface
 
 All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webhooks/*` requires
@@ -241,8 +261,12 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | POST | `/sms/webhooks/inbound` | Carrier webhook — routes to a conversation, or texts back a disambiguation menu |
 | POST | `/sms/webhooks/delivery-status` | Carrier delivery-status callback |
 | GET/POST | `/conversations/:id/showings` | Propose a showing / list showings for a conversation |
-| PATCH | `/conversations/:id/showings/:showingId/slots/:slotId/accept` | Accept a proposed time slot |
+| PATCH | `/conversations/:id/showings/:showingId/slots/:slotId/accept` | Accept a proposed time slot — emails both sides a `.ics` calendar invite |
 | PATCH | `/conversations/:id/showings/:showingId/cancel`, `/complete` | |
+| GET/POST | `/conversations/:id/id-submissions` | Tenant-only: starts (or reuses) a $5 ID-submission checkout for that conversation |
+| PATCH | `/id-submissions/:id/cancel` | Tenant cancels their own unpaid submission |
+| POST | `/id-submissions/:id/submit` | Tenant uploads the ID file once paid — emailed to the current landlord-side contact, never stored |
+| POST | `/payments/webhooks` | Payment processor (or the mock provider's dev checkout page) confirms a completed charge |
 | GET | `/moderation/flags` | Staff/admin only — filterable by `status`; defaults to `FLAGGED`+`UNDER_REVIEW` |
 | GET/PATCH | `/moderation/flags/:id`, `/flags/:id/review` | Review a flag: clear / keep under review / confirm block, with an optional note |
 | GET | `/moderation/users/:userId/violations`, `/restrictions` | Staff/admin only |

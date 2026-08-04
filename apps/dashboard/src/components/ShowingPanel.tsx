@@ -62,6 +62,12 @@ export function ShowingPanel({
         )}
       </div>
 
+      {showing?.status === 'SCHEDULED' && (
+        <p style={{ fontSize: 12, color: theme.textMuted, margin: '6px 0 0' }}>
+          A calendar invite (.ics) was emailed to both parties.
+        </p>
+      )}
+
       {showing && showing.timeSlots.length > 0 && (
         <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
           {showing.timeSlots.map((slot) => (

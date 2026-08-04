@@ -46,6 +46,10 @@ class EnvironmentVariables {
   @IsOptional()
   SMS_PROVIDER?: string;
 
+  @IsIn(['mock', 'square'])
+  @IsOptional()
+  PAYMENT_PROVIDER?: string;
+
   @IsInt()
   @Min(1)
   @IsOptional()
