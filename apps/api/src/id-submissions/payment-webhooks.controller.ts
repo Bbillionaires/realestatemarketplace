@@ -2,17 +2,24 @@ import { Body, Controller, Headers, HttpCode, HttpStatus, Post, Req } from '@nes
 import { Request } from 'express';
 import { Public } from '../common/decorators/public.decorator';
 import { IdSubmissionsService } from './id-submissions.service';
+import { GigJobsService } from '../gig-jobs/gig-jobs.service';
 
 /**
  * Unauthenticated by JWT — the payment processor (or the mock provider's
  * "simulate payment" page in dev), not a logged-in user, calls this.
- * Trust comes from PaymentProvider.validateWebhook, checked inside the
- * service before anything is applied.
+ * Trust comes from PaymentProvider.validateWebhook, checked inside each
+ * service before anything is applied. A single PAYMENT_PROVIDER serves
+ * every paid flow in the app, so every feature that can be paid for gets a
+ * turn at the same event — each one is scoped by paymentOrderId lookup and
+ * silently no-ops if this order isn't theirs.
  */
 @Controller('payments/webhooks')
 @Public()
 export class PaymentWebhooksController {
-  constructor(private readonly idSubmissionsService: IdSubmissionsService) {}
+  constructor(
+    private readonly idSubmissionsService: IdSubmissionsService,
+    private readonly gigJobsService: GigJobsService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.OK)
@@ -21,11 +28,10 @@ export class PaymentWebhooksController {
     @Headers('x-square-hmacsha256-signature') signature: string | undefined,
     @Req() req: Request,
   ) {
-    await this.idSubmissionsService.handlePaymentWebhook(
-      signature ?? '',
-      `${req.protocol}://${req.get('host')}${req.originalUrl}`,
-      JSON.stringify(body),
-    );
+    const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    const rawBody = JSON.stringify(body);
+    await this.idSubmissionsService.handlePaymentWebhook(signature ?? '', url, rawBody);
+    await this.gigJobsService.handlePaymentWebhook(signature ?? '', url, rawBody);
     return { status: 'ok' };
   }
 }

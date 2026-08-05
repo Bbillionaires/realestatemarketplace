@@ -187,6 +187,7 @@ export function NavBar() {
               {isLoggedIn ? (
                 <>
                   <DrawerLink href="/inbox" label="Inbox" onClick={close} />
+                  <DrawerLink href="/gig-jobs" label="Gig Jobs" onClick={close} />
                   {isStaff && <DrawerLink href="/moderation" label="Moderation" onClick={close} />}
                   {isAdmin && <DrawerLink href="/admin/lenders" label="Lender Assignments" onClick={close} />}
                   {isLender && <DrawerLink href="/lender" label="Lender Dashboard" onClick={close} />}

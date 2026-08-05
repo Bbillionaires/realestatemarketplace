@@ -18,6 +18,8 @@ export async function createTestApp(): Promise<{ app: INestApplication; moduleRe
 
 export async function resetDatabase(prisma: PrismaService): Promise<void> {
   // Ordered to respect foreign key constraints.
+  await prisma.gigVoucher.deleteMany();
+  await prisma.gigJob.deleteMany();
   await prisma.moderationFlag.deleteMany();
   await prisma.violation.deleteMany();
   await prisma.userRestriction.deleteMany();

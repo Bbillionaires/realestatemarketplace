@@ -194,6 +194,46 @@ export interface WaitlistEntry {
   property?: { id: string; title: string; addressLine1: string; city: string; state: string };
 }
 
+export type GigJobStatus = 'OPEN' | 'CLAIMED' | 'COMPLETED' | 'CONFIRMED' | 'CANCELLED';
+export type GigVoucherStatus = 'ISSUED' | 'APPLIED';
+
+export interface GigJob {
+  id: string;
+  posterId: string;
+  posterDisplayName: string;
+  posterRole: string;
+  propertyId: string | null;
+  propertyTitle: string | null;
+  title: string;
+  description: string;
+  payoutCents: number;
+  status: GigJobStatus;
+  claimedById: string | null;
+  claimedAt: string | null;
+  completedAt: string | null;
+  confirmedAt: string | null;
+  cancelledAt: string | null;
+  checkoutUrl: string | null;
+  createdAt: string;
+}
+
+export interface GigVoucher {
+  id: string;
+  gigJobId: string;
+  gigJobTitle: string;
+  tenantId: string;
+  tenantDisplayName: string;
+  landlordId: string;
+  landlordDisplayName: string;
+  payoutCents: number;
+  feeCents: number;
+  voucherCents: number;
+  status: GigVoucherStatus;
+  appliedAt: string | null;
+  appliedNote: string | null;
+  createdAt: string;
+}
+
 export type LenderAccessTier = 'BASIC' | 'PREMIUM';
 export type LenderRequestStatus = 'PENDING' | 'FULFILLED' | 'DECLINED';
 
@@ -598,4 +638,22 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ providerOrderId, paid: true }),
     }),
+  listGigJobs: (accessToken: string) => request<GigJob[]>('/gig-jobs', {}, accessToken),
+  listPostedGigJobs: (accessToken: string) => request<GigJob[]>('/gig-jobs/posted', {}, accessToken),
+  createGigJob: (accessToken: string, payload: { title: string; description: string; payoutCents: number; propertyId?: string }) =>
+    request<GigJob>('/gig-jobs', { method: 'POST', body: JSON.stringify(payload) }, accessToken),
+  claimGigJob: (accessToken: string, id: string, conversationId: string) =>
+    request<GigJob>(`/gig-jobs/${id}/claim`, { method: 'PATCH', body: JSON.stringify({ conversationId }) }, accessToken),
+  completeGigJob: (accessToken: string, id: string) =>
+    request<GigJob>(`/gig-jobs/${id}/complete`, { method: 'PATCH' }, accessToken),
+  rejectGigJobCompletion: (accessToken: string, id: string) =>
+    request<GigJob>(`/gig-jobs/${id}/reject-completion`, { method: 'PATCH' }, accessToken),
+  cancelGigJob: (accessToken: string, id: string) =>
+    request<GigJob>(`/gig-jobs/${id}/cancel`, { method: 'PATCH' }, accessToken),
+  payGigJob: (accessToken: string, id: string) =>
+    request<GigJob>(`/gig-jobs/${id}/pay`, { method: 'POST' }, accessToken),
+  listMyGigVouchers: (accessToken: string) => request<GigVoucher[]>('/gig-vouchers/me', {}, accessToken),
+  listIssuedGigVouchers: (accessToken: string) => request<GigVoucher[]>('/gig-vouchers/issued', {}, accessToken),
+  applyGigVoucher: (accessToken: string, id: string, note?: string) =>
+    request<GigVoucher>(`/gig-vouchers/${id}/apply`, { method: 'PATCH', body: JSON.stringify({ note }) }, accessToken),
 };

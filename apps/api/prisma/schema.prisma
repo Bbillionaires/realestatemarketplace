@@ -236,6 +236,19 @@ enum IdSubmissionStatus {
   CANCELLED
 }
 
+enum GigJobStatus {
+  OPEN
+  CLAIMED
+  COMPLETED
+  CONFIRMED
+  CANCELLED
+}
+
+enum GigVoucherStatus {
+  ISSUED
+  APPLIED
+}
+
 enum ConsentType {
   TRANSACTIONAL
   MARKETING
@@ -309,6 +322,10 @@ model User {
   lenderAssignments     LenderAssignment[]             @relation("LenderAssignmentLender")
   tenantLenderAssignments LenderAssignment[]            @relation("LenderAssignmentTenant")
   lenderAssignmentsCreated LenderAssignment[]           @relation("LenderAssignmentAssignedBy")
+  gigJobsPosted         GigJob[]                     @relation("GigJobPoster")
+  gigJobsClaimed        GigJob[]                     @relation("GigJobClaimedBy")
+  gigVouchersReceived   GigVoucher[]                 @relation("GigVoucherTenant")
+  gigVouchersIssued     GigVoucher[]                 @relation("GigVoucherLandlord")
 
   @@index([role])
 }
@@ -455,6 +472,7 @@ model Property {
   waitlistEntries     PropertyWaitlistEntry[]
   lenderAssignments   LenderAssignment[]
   nearbySchools       NearbySchool[]
+  gigJobs             GigJob[]
 
   @@index([ownerId])
   @@index([city, state])
@@ -603,6 +621,7 @@ model Conversation {
   relayAssignments RelayAssignment[]
   showings         Showing[]
   idSubmissions    IdSubmission[]
+  claimedGigJobs   GigJob[]
   applications     Application[]
   leases           Lease[]
   contactReleases  ContactRelease[]
@@ -778,6 +797,74 @@ model IdSubmission {
 
   @@index([conversationId])
   @@index([paymentOrderId])
+}
+
+// A small paid task a landlord/property manager posts for their own tenants,
+// or an admin posts for every tenant on the platform — aimed at giving a
+// tenant a way to earn rent relief, not spending money, so completing one
+// never pays cash: it produces a GigVoucher instead. `claimedConversation`
+// is how eligibility is checked (a landlord-posted job requires a
+// conversation with that same landlord) and how the resulting voucher gets
+// attributed to the right landlord — this platform has no Lease/rent-ledger
+// flow actually wired up yet, so the tenant-landlord Conversation is the one
+// real, populated signal of "who does this tenant rent from."
+model GigJob {
+  id                    String        @id @default(uuid())
+  posterId              String
+  poster                User          @relation("GigJobPoster", fields: [posterId], references: [id])
+  // Snapshotted at post time: LANDLORD/PROPERTY_MANAGER posts are scoped to
+  // their own tenants; ADMINISTRATOR/SUPER_ADMINISTRATOR posts are visible
+  // platform-wide. A later role change never retroactively changes this.
+  posterRole            Role
+  propertyId            String?
+  property              Property?     @relation(fields: [propertyId], references: [id])
+  title                 String
+  description           String
+  payoutCents           Int
+  status                GigJobStatus  @default(OPEN)
+  claimedById           String?
+  claimedBy             User?         @relation("GigJobClaimedBy", fields: [claimedById], references: [id])
+  claimedConversationId String?
+  claimedConversation   Conversation? @relation(fields: [claimedConversationId], references: [id])
+  claimedAt             DateTime?
+  completedAt           DateTime?
+  confirmedAt           DateTime?
+  cancelledAt           DateTime?
+  paymentProviderCheckoutId String?
+  paymentOrderId        String?
+  checkoutUrl           String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  voucher               GigVoucher?
+
+  @@index([posterId])
+  @@index([status])
+  @@index([paymentOrderId])
+}
+
+// Rent-relief credit produced by a confirmed GigJob. The platform only
+// documents that it was issued and, later, that the landlord marked it
+// applied — actually reducing what's owed happens off-platform, however
+// that landlord and tenant already track rent.
+model GigVoucher {
+  id           String           @id @default(uuid())
+  gigJobId     String           @unique
+  gigJob       GigJob           @relation(fields: [gigJobId], references: [id], onDelete: Cascade)
+  tenantId     String
+  tenant       User             @relation("GigVoucherTenant", fields: [tenantId], references: [id])
+  landlordId   String
+  landlord     User             @relation("GigVoucherLandlord", fields: [landlordId], references: [id])
+  payoutCents  Int
+  feeCents     Int
+  voucherCents Int
+  status       GigVoucherStatus @default(ISSUED)
+  appliedAt    DateTime?
+  appliedNote  String?
+  createdAt    DateTime         @default(now())
+
+  @@index([tenantId])
+  @@index([landlordId])
 }
 
 // ---------------------------------------------------------------------------

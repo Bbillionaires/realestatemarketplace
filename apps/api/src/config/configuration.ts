@@ -31,6 +31,8 @@ export interface AppConfig {
     apiKey: string;
   };
   rentEstimateRadiusMiles: number;
+  /** Percentage (0-100) skimmed from a confirmed gig's payout to fund the voucher's face value. */
+  gigJobFeePercent: number;
   twilio: {
     accountSid: string;
     authToken: string;
@@ -85,6 +87,7 @@ export default (): AppConfig => ({
     apiKey: process.env.GREATSCHOOLS_API_KEY ?? '',
   },
   rentEstimateRadiusMiles: parseFloat(process.env.RENT_ESTIMATE_RADIUS_MILES ?? '1.5'),
+  gigJobFeePercent: parseFloat(process.env.GIG_JOB_FEE_PERCENT ?? '10'),
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
     authToken: process.env.TWILIO_AUTH_TOKEN ?? '',

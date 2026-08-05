@@ -58,8 +58,14 @@ apps/
       id-submissions/    Tenant pays a $5 convenience fee (PaymentProvider checkout), then submits an
                          ID file that's emailed straight through to whoever currently handles the
                          conversation (owner or assigned property manager) and never persisted
+      gig-jobs/          Landlord/property-manager-posted gigs scoped to their own tenants (matched via
+                         an existing Conversation, since Lease isn't wired up yet), or admin-posted gigs
+                         visible platform-wide. A confirmed gig charges the poster via PaymentProvider
+                         and issues a GigVoucher (payout minus a skimmed platform fee) instead of paying
+                         the tenant cash — redemption is just a landlord-acknowledged record, since the
+                         platform has no rent-ledger/invoicing of its own
       payments/          PaymentProvider interface, Mock provider, Square provider (Payment Links API
-                         + webhook signature verification)
+                         + webhook signature verification) — shared by id-submissions and gig-jobs
       geocoding/         GeocodingProvider interface, Mock provider, US Census Bureau provider
       schools/           SchoolsProvider interface, Mock provider, GreatSchools provider
       realtime/          Socket.IO gateway broadcasting new messages / conversation / showing updates
@@ -77,6 +83,7 @@ apps/
     src/app/moderation/           Staff-only moderator dashboard: flag queue, review, violation/restriction history, admin notes, account suspend/restore, and an admin-only per-moderator suspend-permission toggle
     src/components/ShowingPanel.tsx  Propose/accept/cancel a showing time slot from the thread
     src/components/IdSubmissionPanel.tsx  Pay the $5 fee, then submit an ID file, from the thread
+    src/app/gig-jobs/              Post/browse/claim/complete gig jobs, pay out, and manage rent vouchers
     src/app/mock-checkout/         Dev-only stand-in for Square's hosted checkout page (PAYMENT_PROVIDER=mock)
     src/lib/use-conversation-socket.ts  Socket.IO client hook used by the conversation thread
 docker/
@@ -250,6 +257,17 @@ history-split case added to `test/conversations.e2e-spec.ts`) —
   from the estimate for an address near the first, while an identical-address query still averages
   correctly; an unresolvable address is distinguished from "resolved but no nearby comps."
 
+**Gig jobs** (`test/gig-jobs.e2e-spec.ts`) — a landlord/property-manager-posted gig is visible only to
+tenants who have a conversation with that same poster (proven by posting from two different landlords
+and asserting each one's tenant sees only their own), while an admin-posted gig is visible platform-wide;
+a claim is rejected if the tenant supplies a conversation belonging to someone else, or one with a
+landlord the gig isn't scoped to, even though the conversation is genuinely theirs; the full
+claim → complete → reject-completion → re-complete → pay → voucher lifecycle is run end-to-end, asserting
+the platform fee is skimmed correctly (a $100 payout at the default 10% fee produces a $90 voucher, not
+$100); only the landlord a voucher is earmarked for can mark it applied, and a second apply attempt is
+rejected; a property manager's own-tenant scoping is proven to follow *current* manager assignments
+rather than a tenant's pre-existing conversation with the prior owner.
+
 ## API surface
 
 All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webhooks/*` requires
@@ -286,7 +304,15 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | GET/POST | `/conversations/:id/id-submissions` | Tenant-only: starts (or reuses) a $5 ID-submission checkout for that conversation |
 | PATCH | `/id-submissions/:id/cancel` | Tenant cancels their own unpaid submission |
 | POST | `/id-submissions/:id/submit` | Tenant uploads the ID file once paid — emailed to the current landlord-side contact, never stored |
-| POST | `/payments/webhooks` | Payment processor (or the mock provider's dev checkout page) confirms a completed charge |
+| POST | `/payments/webhooks` | Payment processor (or the mock provider's dev checkout page) confirms a completed charge — shared by ID submissions and gig jobs |
+| GET | `/gig-jobs` | Tenant view: open gigs visible to them (own landlord's + admin's) plus anything they've claimed |
+| GET | `/gig-jobs/posted` | Poster view: every gig this landlord/manager/admin has posted |
+| POST | `/gig-jobs` | Landlord/property manager (scoped to their own tenants) or admin (platform-wide) |
+| PATCH | `/gig-jobs/:id/claim` | Tenant-only; validated against one of their own conversations |
+| PATCH | `/gig-jobs/:id/complete`, `/reject-completion`, `/cancel` | |
+| POST | `/gig-jobs/:id/pay` | Poster confirms completion — charges them via PaymentProvider; the voucher issues once the webhook confirms payment |
+| GET | `/gig-vouchers/me`, `/gig-vouchers/issued` | Tenant's received vouchers / landlord's issued vouchers |
+| PATCH | `/gig-vouchers/:id/apply` | The landlord the voucher is earmarked for marks it applied to rent |
 | GET | `/moderation/flags` | Staff/admin only — filterable by `status`; defaults to `FLAGGED`+`UNDER_REVIEW` |
 | GET/PATCH | `/moderation/flags/:id`, `/flags/:id/review` | Review a flag: clear / keep under review / confirm block, with an optional note |
 | GET | `/moderation/users/:userId/violations`, `/restrictions` | Staff/admin only |

@@ -25,6 +25,7 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { ShowingsModule } from './showings/showings.module';
 import { LendersModule } from './lenders/lenders.module';
 import { IdSubmissionsModule } from './id-submissions/id-submissions.module';
+import { GigJobsModule } from './gig-jobs/gig-jobs.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -68,6 +69,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     ShowingsModule,
     LendersModule,
     IdSubmissionsModule,
+    GigJobsModule,
   ],
   providers: [
     // Order matters: JwtAuthGuard populates request.user, then RolesGuard
