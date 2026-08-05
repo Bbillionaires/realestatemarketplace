@@ -249,6 +249,11 @@ enum GigVoucherStatus {
   APPLIED
 }
 
+enum JobReferralStatus {
+  ACTIVE
+  CLOSED
+}
+
 enum ConsentType {
   TRANSACTIONAL
   MARKETING
@@ -326,6 +331,7 @@ model User {
   gigJobsClaimed        GigJob[]                     @relation("GigJobClaimedBy")
   gigVouchersReceived   GigVoucher[]                 @relation("GigVoucherTenant")
   gigVouchersIssued     GigVoucher[]                 @relation("GigVoucherLandlord")
+  jobReferralsPosted    JobReferral[]                @relation("JobReferralPoster")
 
   @@index([role])
 }
@@ -865,6 +871,32 @@ model GigVoucher {
 
   @@index([tenantId])
   @@index([landlordId])
+}
+
+// A landlord/property manager/admin sharing word of a real, external job
+// opening (e.g. "McDonald's on Main St is hiring") they have no control
+// over and aren't paying for — pure information-sharing, deliberately with
+// no payment/voucher fields at all, unlike GigJob. Visibility scoping
+// mirrors GigJob (own tenants via an existing Conversation, or
+// platform-wide for admins) without any of GigJob's liability surface.
+model JobReferral {
+  id           String            @id @default(uuid())
+  posterId     String
+  poster       User              @relation("JobReferralPoster", fields: [posterId], references: [id])
+  posterRole   Role
+  title        String
+  employerName String
+  location     String
+  applyUrl     String?
+  contactInfo  String?
+  description  String?
+  status       JobReferralStatus @default(ACTIVE)
+  closedAt     DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([posterId])
+  @@index([status])
 }
 
 // ---------------------------------------------------------------------------

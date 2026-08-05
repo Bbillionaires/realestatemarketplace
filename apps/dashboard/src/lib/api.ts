@@ -234,6 +234,24 @@ export interface GigVoucher {
   createdAt: string;
 }
 
+export type JobReferralStatus = 'ACTIVE' | 'CLOSED';
+
+export interface JobReferral {
+  id: string;
+  posterId: string;
+  posterDisplayName: string;
+  posterRole: string;
+  title: string;
+  employerName: string;
+  location: string;
+  applyUrl: string | null;
+  contactInfo: string | null;
+  description: string | null;
+  status: JobReferralStatus;
+  closedAt: string | null;
+  createdAt: string;
+}
+
 export type LenderAccessTier = 'BASIC' | 'PREMIUM';
 export type LenderRequestStatus = 'PENDING' | 'FULFILLED' | 'DECLINED';
 
@@ -656,4 +674,12 @@ export const api = {
   listIssuedGigVouchers: (accessToken: string) => request<GigVoucher[]>('/gig-vouchers/issued', {}, accessToken),
   applyGigVoucher: (accessToken: string, id: string, note?: string) =>
     request<GigVoucher>(`/gig-vouchers/${id}/apply`, { method: 'PATCH', body: JSON.stringify({ note }) }, accessToken),
+  listJobReferrals: (accessToken: string) => request<JobReferral[]>('/job-referrals', {}, accessToken),
+  listPostedJobReferrals: (accessToken: string) => request<JobReferral[]>('/job-referrals/posted', {}, accessToken),
+  createJobReferral: (
+    accessToken: string,
+    payload: { title: string; employerName: string; location: string; applyUrl?: string; contactInfo?: string; description?: string },
+  ) => request<JobReferral>('/job-referrals', { method: 'POST', body: JSON.stringify(payload) }, accessToken),
+  closeJobReferral: (accessToken: string, id: string) =>
+    request<JobReferral>(`/job-referrals/${id}/close`, { method: 'PATCH' }, accessToken),
 };

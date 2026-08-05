@@ -6,6 +6,7 @@ import {
   ConversationSummary,
   GigJob,
   GigVoucher,
+  JobReferral,
   PropertySummary,
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth-context';
@@ -41,6 +42,8 @@ export default function GigJobsPage() {
   const [properties, setProperties] = useState<PropertySummary[]>([]);
   const [myVouchers, setMyVouchers] = useState<GigVoucher[]>([]);
   const [issuedVouchers, setIssuedVouchers] = useState<GigVoucher[]>([]);
+  const [referrals, setReferrals] = useState<JobReferral[]>([]);
+  const [postedReferrals, setPostedReferrals] = useState<JobReferral[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,10 +69,12 @@ export default function GigJobsPage() {
       loaders.push(api.listGigJobs(accessToken).then(setJobs));
       loaders.push(api.listConversations(accessToken).then(setConversations));
       loaders.push(api.listMyGigVouchers(accessToken).then(setMyVouchers));
+      loaders.push(api.listJobReferrals(accessToken).then(setReferrals));
     }
     if (isPoster) {
       loaders.push(api.listPostedGigJobs(accessToken).then(setPostedJobs));
       loaders.push(api.listIssuedGigVouchers(accessToken).then(setIssuedVouchers));
+      loaders.push(api.listPostedJobReferrals(accessToken).then(setPostedReferrals));
     }
     if (isOwnTenantPoster) {
       loaders.push(api.listProperties(accessToken).then(setProperties));
@@ -186,6 +191,32 @@ export default function GigJobsPage() {
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to apply voucher');
+    } finally {
+      setBusyJobId(null);
+    }
+  }
+
+  async function handlePostReferral(payload: {
+    title: string;
+    employerName: string;
+    location: string;
+    applyUrl?: string;
+    contactInfo?: string;
+    description?: string;
+  }) {
+    if (!accessToken) return;
+    await api.createJobReferral(accessToken, payload);
+    await refresh();
+  }
+
+  async function handleCloseReferral(id: string) {
+    if (!accessToken) return;
+    setBusyJobId(id);
+    try {
+      await api.closeJobReferral(accessToken, id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to mark referral filled');
     } finally {
       setBusyJobId(null);
     }
@@ -467,8 +498,189 @@ export default function GigJobsPage() {
             </div>
           </div>
         )}
+
+        {isPoster && (
+          <div style={cardStyle}>
+            <h2 style={{ fontSize: 16, marginTop: 0 }}>Job openings</h2>
+            <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 0 }}>
+              Word of a real, external job you have no control over and aren't paying for — pure
+              information-sharing, not a paid gig. No voucher, no charge to you.
+            </p>
+            <ReferralPostForm onSubmit={handlePostReferral} />
+            {postedReferrals.length === 0 ? (
+              <p style={{ color: theme.textMuted, fontSize: 13 }}>No job referrals posted yet.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+                {postedReferrals.map((r) => (
+                  <ReferralRow key={r.id} referral={r} onClose={handleCloseReferral} busy={busyJobId === r.id} canClose />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {isTenant && referrals.length > 0 && (
+          <div style={cardStyle}>
+            <h2 style={{ fontSize: 16, marginTop: 0 }}>Job openings</h2>
+            <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 0 }}>
+              Shared by landlords/managers or platform staff — these are real external jobs, not paid
+              gigs on this platform, and don't produce a voucher.
+            </p>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {referrals.map((r) => (
+                <ReferralRow key={r.id} referral={r} canClose={false} busy={false} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </main>
+  );
+}
+
+function ReferralPostForm({
+  onSubmit,
+}: {
+  onSubmit: (payload: {
+    title: string;
+    employerName: string;
+    location: string;
+    applyUrl?: string;
+    contactInfo?: string;
+    description?: string;
+  }) => Promise<void>;
+}) {
+  const [title, setTitle] = useState('');
+  const [employerName, setEmployerName] = useState('');
+  const [location, setLocation] = useState('');
+  const [applyUrl, setApplyUrl] = useState('');
+  const [contactInfo, setContactInfo] = useState('');
+  const [description, setDescription] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const smallInput = {
+    width: '100%',
+    padding: '8px 10px',
+    marginTop: 4,
+    borderRadius: 6,
+    border: `1px solid ${theme.border}`,
+    fontSize: 13,
+    boxSizing: 'border-box' as const,
+    fontFamily: 'inherit',
+  };
+  const smallLabel = { display: 'block', marginBottom: 10, fontSize: 12, color: theme.textMuted, fontWeight: 600 };
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setPosting(true);
+    setError(null);
+    try {
+      await onSubmit({
+        title,
+        employerName,
+        location,
+        applyUrl: applyUrl || undefined,
+        contactInfo: contactInfo || undefined,
+        description: description || undefined,
+      });
+      setTitle('');
+      setEmployerName('');
+      setLocation('');
+      setApplyUrl('');
+      setContactInfo('');
+      setDescription('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to post job referral');
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <label style={{ ...smallLabel, flex: 1 }}>
+          Job title
+          <input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={150} style={smallInput} />
+        </label>
+        <label style={{ ...smallLabel, flex: 1 }}>
+          Employer
+          <input value={employerName} onChange={(e) => setEmployerName(e.target.value)} required maxLength={150} style={smallInput} />
+        </label>
+      </div>
+      <label style={smallLabel}>
+        Location
+        <input value={location} onChange={(e) => setLocation(e.target.value)} required maxLength={300} style={smallInput} />
+      </label>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <label style={{ ...smallLabel, flex: 1 }}>
+          Apply URL (optional)
+          <input value={applyUrl} onChange={(e) => setApplyUrl(e.target.value)} type="url" style={smallInput} />
+        </label>
+        <label style={{ ...smallLabel, flex: 1 }}>
+          Contact info (optional)
+          <input value={contactInfo} onChange={(e) => setContactInfo(e.target.value)} maxLength={200} style={smallInput} />
+        </label>
+      </div>
+      <label style={smallLabel}>
+        Notes (optional)
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={1000} style={smallInput} />
+      </label>
+      {error && <p style={{ color: theme.danger, fontSize: 12 }}>{error}</p>}
+      <button
+        type="submit"
+        disabled={posting}
+        style={{ border: 'none', background: theme.primary, color: 'white', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+      >
+        {posting ? 'Posting...' : 'Post job opening'}
+      </button>
+    </form>
+  );
+}
+
+function ReferralRow({
+  referral,
+  canClose,
+  onClose,
+  busy,
+}: {
+  referral: JobReferral;
+  canClose: boolean;
+  onClose?: (id: string) => void;
+  busy: boolean;
+}) {
+  return (
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 8, padding: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <strong style={{ fontSize: 14 }}>
+          {referral.title} — {referral.employerName}
+        </strong>
+        {referral.status === 'CLOSED' && (
+          <span style={{ fontSize: 11, color: theme.textMuted, fontWeight: 700 }}>FILLED</span>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{referral.location}</div>
+      {referral.description && <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 4 }}>{referral.description}</div>}
+      {referral.contactInfo && (
+        <div style={{ fontSize: 12, color: theme.text, marginTop: 4 }}>Contact: {referral.contactInfo}</div>
+      )}
+      {referral.applyUrl && (
+        <a href={referral.applyUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: theme.primary, display: 'inline-block', marginTop: 4 }}>
+          Apply here →
+        </a>
+      )}
+      <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Shared by {referral.posterDisplayName}</div>
+      {canClose && referral.status === 'ACTIVE' && (
+        <button
+          onClick={() => onClose?.(referral.id)}
+          disabled={busy}
+          style={{ marginTop: 8, border: `1px solid ${theme.border}`, background: 'white', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
+        >
+          Mark filled
+        </button>
+      )}
+    </div>
   );
 }
 

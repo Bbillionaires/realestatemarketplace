@@ -64,6 +64,11 @@ apps/
                          and issues a GigVoucher (payout minus a skimmed platform fee) instead of paying
                          the tenant cash — redemption is just a landlord-acknowledged record, since the
                          platform has no rent-ledger/invoicing of its own
+      job-referrals/     Landlord/property-manager/admin-posted word-of-mouth about a real external job
+                         opening (e.g. "McDonald's is hiring") that the poster doesn't control and isn't
+                         paying for — pure information-sharing, so unlike gig-jobs there's no voucher, no
+                         PaymentProvider charge, and no completion/claim workflow at all. Visibility uses
+                         the same own-tenant-via-Conversation / admin-platform-wide scoping as gig-jobs
       payments/          PaymentProvider interface, Mock provider, Square provider (Payment Links API
                          + webhook signature verification) — shared by id-submissions and gig-jobs
       geocoding/         GeocodingProvider interface, Mock provider, US Census Bureau provider
@@ -83,7 +88,8 @@ apps/
     src/app/moderation/           Staff-only moderator dashboard: flag queue, review, violation/restriction history, admin notes, account suspend/restore, and an admin-only per-moderator suspend-permission toggle
     src/components/ShowingPanel.tsx  Propose/accept/cancel a showing time slot from the thread
     src/components/IdSubmissionPanel.tsx  Pay the $5 fee, then submit an ID file, from the thread
-    src/app/gig-jobs/              Post/browse/claim/complete gig jobs, pay out, and manage rent vouchers
+    src/app/gig-jobs/              Post/browse/claim/complete gig jobs, pay out, and manage rent vouchers,
+                                    plus a separate "Job openings" section for no-voucher job referrals
     src/app/mock-checkout/         Dev-only stand-in for Square's hosted checkout page (PAYMENT_PROVIDER=mock)
     src/lib/use-conversation-socket.ts  Socket.IO client hook used by the conversation thread
 docker/
@@ -268,6 +274,14 @@ $100); only the landlord a voucher is earmarked for can mark it applied, and a s
 rejected; a property manager's own-tenant scoping is proven to follow *current* manager assignments
 rather than a tenant's pre-existing conversation with the prior owner.
 
+**Job referrals** (`test/job-referrals.e2e-spec.ts`) — the same own-tenant-vs-platform-wide visibility
+rule as gig jobs applies here too (a landlord-posted referral is scoped to only tenants who have a
+conversation with that landlord; an admin-posted referral is visible to everyone), but a tenant can
+never post one (403); an optional `applyUrl`/`contactInfo`/`description` are accepted and persisted, an
+invalid `applyUrl` is rejected (400); and only the original poster can mark their referral filled
+(another landlord gets 403, a second close attempt gets 400) — once closed it stops appearing in the
+tenant-facing list but still shows as `CLOSED` in the poster's own list.
+
 ## API surface
 
 All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webhooks/*` requires
@@ -313,6 +327,10 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | POST | `/gig-jobs/:id/pay` | Poster confirms completion — charges them via PaymentProvider; the voucher issues once the webhook confirms payment |
 | GET | `/gig-vouchers/me`, `/gig-vouchers/issued` | Tenant's received vouchers / landlord's issued vouchers |
 | PATCH | `/gig-vouchers/:id/apply` | The landlord the voucher is earmarked for marks it applied to rent |
+| GET | `/job-referrals` | Tenant view: word-of-mouth about external job openings visible to them (own landlord's + admin's) — no voucher, no payment |
+| GET | `/job-referrals/posted` | Poster view: every referral this landlord/manager/admin has posted |
+| POST | `/job-referrals` | Landlord/property manager (scoped to their own tenants) or admin (platform-wide) |
+| PATCH | `/job-referrals/:id/close` | Only the poster can mark their referral filled |
 | GET | `/moderation/flags` | Staff/admin only — filterable by `status`; defaults to `FLAGGED`+`UNDER_REVIEW` |
 | GET/PATCH | `/moderation/flags/:id`, `/flags/:id/review` | Review a flag: clear / keep under review / confirm block, with an optional note |
 | GET | `/moderation/users/:userId/violations`, `/restrictions` | Staff/admin only |
