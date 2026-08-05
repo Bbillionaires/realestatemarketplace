@@ -13,11 +13,18 @@ const PERK_BADGES: { flag: keyof PropertySummary; label: string }[] = [
   { flag: 'tenantSwapAllowed', label: 'Tenant Swap OK' },
 ];
 
+// Owner has signaled some path to the tenant eventually owning the home —
+// starred prominently rather than folded into the generic perk-badge list.
+function isWillingToSellToTenant(property: PropertySummary): boolean {
+  return property.rentToOwnAvailable || property.leaseToOwnAvailable || property.sellerFinancingAvailable;
+}
+
 export function PropertyCard({ property }: { property: PropertySummary }) {
   const unit = primaryUnit(property.units);
   const rentCents = unit?.rentCents ?? property.monthlyRentCents;
   const available = unit ? unit.isAvailable : property.isActive;
   const perks = PERK_BADGES.filter((p) => property[p.flag]);
+  const willingToSell = isWillingToSellToTenant(property);
 
   return (
     <Link
@@ -66,7 +73,14 @@ export function PropertyCard({ property }: { property: PropertySummary }) {
           {unit?.squareFeet ? ` · ${unit.squareFeet.toLocaleString()} sqft` : ''}
         </div>
 
-        <div style={{ marginTop: 8, fontWeight: 700, fontSize: 15, color: theme.text }}>{property.title}</div>
+        <div style={{ marginTop: 8, fontWeight: 700, fontSize: 15, color: theme.text }}>
+          {willingToSell && (
+            <span title="Owner may be willing to sell to the tenant" style={{ color: theme.gold, marginRight: 4 }}>
+              ★
+            </span>
+          )}
+          {property.title}
+        </div>
         <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 2 }}>
           {property.addressLine1}, {property.city}, {property.state} {property.zip}
         </div>
@@ -121,6 +135,11 @@ export function PropertyCard({ property }: { property: PropertySummary }) {
           }}
         >
           Managed by {property.landlordDisplayName}
+          {willingToSell && (
+            <span title="Owner may be willing to sell to the tenant" style={{ color: theme.gold, marginLeft: 4 }}>
+              ★
+            </span>
+          )}
         </div>
       </div>
     </Link>

@@ -12,6 +12,7 @@ export const theme = {
   danger: '#c23a3a',
   warningBg: '#fff4e5',
   warningText: '#8a5a10',
+  gold: '#c99a2e',
   shadow: '0 1px 2px rgba(21, 34, 56, 0.06), 0 1px 6px rgba(21, 34, 56, 0.04)',
   radius: 12,
 };

@@ -320,6 +320,7 @@ export default function PropertyDetailPage() {
   const rentCents = unit?.rentCents ?? property.monthlyRentCents;
   const canMessageLandlord = !!user && TENANT_ROLES.includes(user.role);
   const canManage = property.ownerId !== undefined;
+  const willingToSell = property.rentToOwnAvailable || property.leaseToOwnAvailable || property.sellerFinancingAvailable;
   const activePerks = LISTING_OPTIONS.filter((o) => property[o.flag as keyof PropertySummary]);
 
   return (
@@ -336,7 +337,14 @@ export default function PropertyDetailPage() {
 
         <div style={{ marginTop: 18 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: 24, margin: 0, color: theme.text, letterSpacing: '-0.01em' }}>{property.title}</h1>
+            <h1 style={{ fontSize: 24, margin: 0, color: theme.text, letterSpacing: '-0.01em' }}>
+              {willingToSell && (
+                <span title="Owner may be willing to sell to the tenant" style={{ color: theme.gold, marginRight: 6 }}>
+                  ★
+                </span>
+              )}
+              {property.title}
+            </h1>
             <span
               style={{
                 fontSize: 12,
@@ -976,8 +984,13 @@ export default function PropertyDetailPage() {
         )}
 
         <p style={{ marginTop: 16, fontSize: 12, color: theme.textMuted }}>
-          Managed by {property.landlordDisplayName}. All communication happens through the platform relay — real
-          phone numbers are never shared.
+          Managed by {property.landlordDisplayName}
+          {willingToSell && (
+            <span title="Owner may be willing to sell to the tenant" style={{ color: theme.gold, marginLeft: 4 }}>
+              ★
+            </span>
+          )}
+          . All communication happens through the platform relay — real phone numbers are never shared.
         </p>
 
         {canMessageLandlord && composerOpen && (
