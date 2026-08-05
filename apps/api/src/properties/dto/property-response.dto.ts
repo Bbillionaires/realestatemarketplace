@@ -1,4 +1,24 @@
-import { PropertyType, SewerSourceType, UtilityType, WaterSourceType } from '@prisma/client';
+import { PropertyType, SewerSourceType, UnitListingType, UtilityType, WaterSourceType } from '@prisma/client';
+
+export class BedResponseDto {
+  id!: string;
+  unitId!: string;
+  bedLabel!: string;
+  rentCents!: number | null;
+  isAvailable!: boolean;
+
+  static from(bed: {
+    id: string;
+    unitId: string;
+    bedLabel: string;
+    rentCents: number | null;
+    isAvailable: boolean;
+  }): BedResponseDto {
+    const dto = new BedResponseDto();
+    Object.assign(dto, bed);
+    return dto;
+  }
+}
 
 export class UnitResponseDto {
   id!: string;
@@ -9,6 +29,8 @@ export class UnitResponseDto {
   squareFeet!: number | null;
   rentCents!: number | null;
   isAvailable!: boolean;
+  listingType!: UnitListingType;
+  beds!: BedResponseDto[];
 
   static from(unit: {
     id: string;
@@ -19,9 +41,20 @@ export class UnitResponseDto {
     squareFeet: number | null;
     rentCents: number | null;
     isAvailable: boolean;
+    listingType: UnitListingType;
+    beds?: { id: string; unitId: string; bedLabel: string; rentCents: number | null; isAvailable: boolean }[];
   }): UnitResponseDto {
     const dto = new UnitResponseDto();
-    Object.assign(dto, unit);
+    dto.id = unit.id;
+    dto.propertyId = unit.propertyId;
+    dto.unitLabel = unit.unitLabel;
+    dto.bedrooms = unit.bedrooms;
+    dto.bathrooms = unit.bathrooms;
+    dto.squareFeet = unit.squareFeet;
+    dto.rentCents = unit.rentCents;
+    dto.isAvailable = unit.isAvailable;
+    dto.listingType = unit.listingType;
+    dto.beds = (unit.beds ?? []).map((b) => BedResponseDto.from(b));
     return dto;
   }
 }
@@ -118,6 +151,8 @@ export class PropertyResponseDto {
         squareFeet: number | null;
         rentCents: number | null;
         isAvailable: boolean;
+        listingType: UnitListingType;
+        beds?: { id: string; unitId: string; bedLabel: string; rentCents: number | null; isAvailable: boolean }[];
       }[];
     },
     options: { includeManagement: boolean },

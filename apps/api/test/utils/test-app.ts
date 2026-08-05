@@ -34,6 +34,7 @@ export async function resetDatabase(prisma: PrismaService): Promise<void> {
   await prisma.conversation.deleteMany();
   await prisma.relayNumber.deleteMany();
   await prisma.propertyManagerAssignment.deleteMany();
+  await prisma.bed.deleteMany();
   await prisma.propertyUnit.deleteMany();
   await prisma.property.deleteMany();
   await prisma.phoneVerification.deleteMany();

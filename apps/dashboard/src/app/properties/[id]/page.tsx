@@ -5,9 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   api,
+  BedSummary,
   NearbySchool,
   PropertySummary,
   SewerSourceType,
+  UnitListingType,
+  UnitSummary,
   UpdatePropertyPayload,
   UtilityType,
   WaitlistEntry,
@@ -59,6 +62,18 @@ const SCHOOL_TYPE_LABEL: Record<string, string> = {
   OTHER: 'Other',
 };
 
+const LISTING_TYPE_LABEL: Record<string, string> = {
+  ENTIRE_PLACE: 'Entire place',
+  PRIVATE_ROOM: 'Private room',
+  SHARED_ROOM: 'Shared room',
+};
+
+const LISTING_TYPE_OPTIONS: { value: UnitListingType; label: string }[] = [
+  { value: 'ENTIRE_PLACE', label: 'Entire place' },
+  { value: 'PRIVATE_ROOM', label: 'Private room' },
+  { value: 'SHARED_ROOM', label: 'Shared room (rented bed-by-bed)' },
+];
+
 function toMonthInput(iso: string | null): string {
   if (!iso) return '';
   return iso.slice(0, 7);
@@ -87,13 +102,7 @@ export default function PropertyDetailPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
-  const [unitEditOpen, setUnitEditOpen] = useState(false);
-  const [unitBedrooms, setUnitBedrooms] = useState('');
-  const [unitBathrooms, setUnitBathrooms] = useState('');
-  const [unitSquareFeet, setUnitSquareFeet] = useState('');
-  const [unitRent, setUnitRent] = useState('');
-  const [unitSaving, setUnitSaving] = useState(false);
-  const [unitError, setUnitError] = useState<string | null>(null);
+  const [messageTarget, setMessageTarget] = useState<{ unitId?: string; bedId?: string; label?: string } | null>(null);
 
   const [schools, setSchools] = useState<NearbySchool[]>([]);
   const [schoolsLoading, setSchoolsLoading] = useState(false);
@@ -241,42 +250,41 @@ export default function PropertyDetailPage() {
     });
   }
 
-  function openUnitEditPanel() {
-    if (!property) return;
-    const unit = property.units[0];
-    setUnitBedrooms(unit?.bedrooms?.toString() ?? '');
-    setUnitBathrooms(unit?.bathrooms?.toString() ?? '');
-    setUnitSquareFeet(unit?.squareFeet?.toString() ?? '');
-    setUnitRent(unit?.rentCents !== undefined && unit?.rentCents !== null ? (unit.rentCents / 100).toString() : '');
-    setUnitError(null);
-    setUnitEditOpen(true);
+  async function refreshProperty() {
+    if (!accessToken) return;
+    const refreshed = await api.getProperty(accessToken, id);
+    setProperty(refreshed);
   }
 
-  async function saveUnitEditPanel() {
-    if (!accessToken || !property) return;
-    setUnitSaving(true);
-    setUnitError(null);
-    try {
-      const payload = {
-        bedrooms: unitBedrooms.trim() ? parseInt(unitBedrooms, 10) : undefined,
-        bathrooms: unitBathrooms.trim() ? parseFloat(unitBathrooms) : undefined,
-        squareFeet: unitSquareFeet.trim() ? parseInt(unitSquareFeet, 10) : undefined,
-        rentCents: unitRent.trim() ? Math.round(parseFloat(unitRent) * 100) : undefined,
-      };
-      const existingUnit = property.units[0];
-      if (existingUnit) {
-        await api.updateUnit(accessToken, property.id, existingUnit.id, payload);
-      } else {
-        await api.createUnit(accessToken, property.id, { unitLabel: '1', ...payload });
-      }
-      const refreshed = await api.getProperty(accessToken, property.id);
-      setProperty(refreshed);
-      setUnitEditOpen(false);
-    } catch (err) {
-      setUnitError(err instanceof Error ? err.message : 'Failed to save unit details');
-    } finally {
-      setUnitSaving(false);
-    }
+  async function handleCreateUnit(payload: Parameters<typeof api.createUnit>[2]) {
+    if (!accessToken) return;
+    await api.createUnit(accessToken, id, payload);
+    await refreshProperty();
+  }
+
+  async function handleUpdateUnit(unitId: string, payload: Parameters<typeof api.updateUnit>[3]) {
+    if (!accessToken) return;
+    await api.updateUnit(accessToken, id, unitId, payload);
+    await refreshProperty();
+  }
+
+  async function handleCreateBed(unitId: string, payload: Parameters<typeof api.createBed>[3]) {
+    if (!accessToken) return;
+    await api.createBed(accessToken, id, unitId, payload);
+    await refreshProperty();
+  }
+
+  async function handleUpdateBed(unitId: string, bedId: string, payload: Parameters<typeof api.updateBed>[4]) {
+    if (!accessToken) return;
+    await api.updateBed(accessToken, id, unitId, bedId, payload);
+    await refreshProperty();
+  }
+
+  function openComposerFor(target: { unitId?: string; bedId?: string; label?: string } | null) {
+    setMessageTarget(target);
+    setGuidance(null);
+    setSendError(null);
+    setComposerOpen(true);
   }
 
   async function submitMessage() {
@@ -285,7 +293,12 @@ export default function PropertyDetailPage() {
     setGuidance(null);
     setSendError(null);
     try {
-      const result = await api.startConversation(accessToken, { propertyId: id, message: messageText });
+      const result = await api.startConversation(accessToken, {
+        propertyId: id,
+        unitId: messageTarget?.unitId,
+        bedId: messageTarget?.bedId,
+        message: messageText,
+      });
       if (result.delivered) {
         router.push(`/conversations/${result.conversation.id}`);
       } else {
@@ -322,6 +335,11 @@ export default function PropertyDetailPage() {
   const canManage = property.ownerId !== undefined;
   const willingToSell = property.rentToOwnAvailable || property.leaseToOwnAvailable || property.sellerFinancingAvailable;
   const activePerks = LISTING_OPTIONS.filter((o) => property[o.flag as keyof PropertySummary]);
+  // Only worth a dedicated section when the property is actually broken
+  // into individually-priced rooms/beds — a single ENTIRE_PLACE unit is
+  // already fully represented by the headline price/bed/bath line above.
+  const hasRoomLevelListings =
+    property.units.length > 1 || property.units.some((u) => u.listingType !== 'ENTIRE_PLACE' || u.beds.length > 0);
 
   return (
     <main style={{ minHeight: '100vh', background: theme.bg, paddingBottom: canMessageLandlord ? 90 : 24 }}>
@@ -412,6 +430,14 @@ export default function PropertyDetailPage() {
             )}
           </div>
         </div>
+
+        {hasRoomLevelListings && (
+          <AvailableRooms
+            units={property.units}
+            canMessage={canMessageLandlord}
+            onMessageAbout={(target) => openComposerFor(target)}
+          />
+        )}
 
         <div style={{ marginTop: 24, background: theme.card, borderRadius: theme.radius, border: `1px solid ${theme.border}`, boxShadow: theme.shadow, padding: 16 }}>
           <Tabs
@@ -820,102 +846,13 @@ export default function PropertyDetailPage() {
         )}
 
         {canManage && (
-          <div style={{ marginTop: 16, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: 15 }}>Unit details</h3>
-              {!unitEditOpen && (
-                <button
-                  onClick={openUnitEditPanel}
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: 8,
-                    border: `1px solid ${theme.border}`,
-                    background: 'white',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Edit
-                </button>
-              )}
-            </div>
-
-            {!unitEditOpen && (
-              <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 8, marginBottom: 0 }}>
-                Bedrooms, bathrooms, square footage, and unit rent shown to tenants.
-              </p>
-            )}
-
-            {unitEditOpen && (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-                  <label style={{ flex: 1, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
-                    Bedrooms
-                    <input
-                      type="number"
-                      min={0}
-                      max={20}
-                      value={unitBedrooms}
-                      onChange={(e) => setUnitBedrooms(e.target.value)}
-                      style={{ display: 'block', width: '100%', padding: '10px 12px', marginTop: 6, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 14, boxSizing: 'border-box' }}
-                    />
-                  </label>
-                  <label style={{ flex: 1, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
-                    Bathrooms
-                    <input
-                      type="number"
-                      min={0}
-                      max={20}
-                      step="0.5"
-                      value={unitBathrooms}
-                      onChange={(e) => setUnitBathrooms(e.target.value)}
-                      style={{ display: 'block', width: '100%', padding: '10px 12px', marginTop: 6, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 14, boxSizing: 'border-box' }}
-                    />
-                  </label>
-                  <label style={{ flex: 1, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
-                    Square feet
-                    <input
-                      type="number"
-                      min={0}
-                      value={unitSquareFeet}
-                      onChange={(e) => setUnitSquareFeet(e.target.value)}
-                      style={{ display: 'block', width: '100%', padding: '10px 12px', marginTop: 6, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 14, boxSizing: 'border-box' }}
-                    />
-                  </label>
-                </div>
-                <label style={{ display: 'block', fontSize: 13, color: theme.textMuted, fontWeight: 600, marginBottom: 14 }}>
-                  Unit rent ($/month)
-                  <input
-                    type="number"
-                    min={0}
-                    value={unitRent}
-                    onChange={(e) => setUnitRent(e.target.value)}
-                    style={{ display: 'block', width: '100%', maxWidth: 200, padding: '10px 12px', marginTop: 6, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 14, boxSizing: 'border-box' }}
-                  />
-                </label>
-
-                {unitError && <p style={{ color: theme.danger, fontSize: 13 }}>{unitError}</p>}
-
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={saveUnitEditPanel}
-                    disabled={unitSaving}
-                    style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: theme.primary, color: 'white', fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    {unitSaving ? 'Saving...' : 'Save changes'}
-                  </button>
-                  <button
-                    onClick={() => setUnitEditOpen(false)}
-                    disabled={unitSaving}
-                    style={{ padding: '10px 18px', borderRadius: 8, border: `1px solid ${theme.border}`, background: 'white', cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <UnitsManager
+            units={property.units}
+            onCreateUnit={handleCreateUnit}
+            onUpdateUnit={handleUpdateUnit}
+            onCreateBed={handleCreateBed}
+            onUpdateBed={handleUpdateBed}
+          />
         )}
 
         {canMessageLandlord && (
@@ -996,6 +933,11 @@ export default function PropertyDetailPage() {
         {canMessageLandlord && composerOpen && (
           <div style={{ marginTop: 16, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 10, padding: 16 }}>
             <h3 style={{ marginTop: 0, fontSize: 15 }}>Message {property.landlordDisplayName}</h3>
+            {messageTarget?.label && (
+              <p style={{ fontSize: 12, color: theme.textMuted, marginTop: -6, marginBottom: 10 }}>
+                About: {messageTarget.label}
+              </p>
+            )}
             <textarea
               value={messageText}
               onChange={(e) => setMessageText(e.target.value)}
@@ -1053,7 +995,7 @@ export default function PropertyDetailPage() {
           }}
         >
           <button
-            onClick={() => setComposerOpen(true)}
+            onClick={() => openComposerFor(null)}
             style={{
               width: '100%',
               maxWidth: 900,
@@ -1072,5 +1014,446 @@ export default function PropertyDetailPage() {
         </div>
       )}
     </main>
+  );
+}
+
+/** Read-only, tenant-facing browse of every individually-priced room/bed on the property. */
+function AvailableRooms({
+  units,
+  canMessage,
+  onMessageAbout,
+}: {
+  units: UnitSummary[];
+  canMessage: boolean;
+  onMessageAbout: (target: { unitId?: string; bedId?: string; label?: string }) => void;
+}) {
+  return (
+    <div style={{ marginTop: 24, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 16 }}>
+      <h3 style={{ margin: 0, fontSize: 15 }}>Available rooms</h3>
+      <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 8, marginBottom: 12 }}>
+        This property is listed room-by-room rather than as a single rental.
+      </p>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {units.map((u) => (
+          <div key={u.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 8, padding: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+              <strong style={{ fontSize: 14 }}>
+                {u.unitLabel} — {LISTING_TYPE_LABEL[u.listingType]}
+              </strong>
+              {u.listingType !== 'SHARED_ROOM' && <span style={{ fontSize: 14, fontWeight: 700 }}>{formatMoney(u.rentCents)}</span>}
+            </div>
+            <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>
+              {u.bedrooms ?? '—'} beds | {u.bathrooms ?? '—'} baths{u.squareFeet ? ` | ${u.squareFeet} sqft` : ''}
+            </div>
+
+            {u.listingType !== 'SHARED_ROOM' && (
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: u.isAvailable ? theme.success : theme.textMuted }}>
+                  {u.isAvailable ? 'Available' : 'Not available'}
+                </span>
+                {canMessage && u.isAvailable && (
+                  <button
+                    onClick={() => onMessageAbout({ unitId: u.id, label: `${u.unitLabel} (${LISTING_TYPE_LABEL[u.listingType]})` })}
+                    style={{ border: 'none', background: 'none', color: theme.primary, fontSize: 12, padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Message about this room
+                  </button>
+                )}
+              </div>
+            )}
+
+            {u.listingType === 'SHARED_ROOM' && (
+              <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+                {u.beds.length === 0 && <p style={{ fontSize: 12, color: theme.textMuted, margin: 0 }}>No beds listed yet.</p>}
+                {u.beds.map((bed) => (
+                  <div key={bed.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: `1px solid ${theme.border}`, borderRadius: 6, padding: '6px 10px' }}>
+                    <div>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{bed.bedLabel}</span>{' '}
+                      <span style={{ fontSize: 12, color: bed.isAvailable ? theme.success : theme.textMuted, fontWeight: 700 }}>
+                        {bed.isAvailable ? 'Available' : 'Not available'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700 }}>{formatMoney(bed.rentCents)}</span>
+                      {canMessage && bed.isAvailable && (
+                        <button
+                          onClick={() => onMessageAbout({ unitId: u.id, bedId: bed.id, label: `${u.unitLabel} — ${bed.bedLabel}` })}
+                          style={{ border: 'none', background: 'none', color: theme.primary, fontSize: 12, padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
+                        >
+                          Message about this bed
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const unitsManagerInputStyle = {
+  display: 'block',
+  width: '100%',
+  padding: '8px 10px',
+  marginTop: 4,
+  borderRadius: 6,
+  border: `1px solid ${theme.border}`,
+  fontSize: 13,
+  boxSizing: 'border-box' as const,
+  fontFamily: 'inherit',
+};
+const unitsManagerLabelStyle = { display: 'block', marginBottom: 10, fontSize: 12, color: theme.textMuted, fontWeight: 600 };
+
+/** Landlord/manager-facing CRUD for every unit on a property, plus beds nested under any SHARED_ROOM unit. */
+function UnitsManager({
+  units,
+  onCreateUnit,
+  onUpdateUnit,
+  onCreateBed,
+  onUpdateBed,
+}: {
+  units: UnitSummary[];
+  onCreateUnit: (payload: {
+    unitLabel: string;
+    listingType: UnitListingType;
+    bedrooms?: number;
+    bathrooms?: number;
+    squareFeet?: number;
+    rentCents?: number;
+    isAvailable?: boolean;
+  }) => Promise<void>;
+  onUpdateUnit: (
+    unitId: string,
+    payload: Partial<{
+      unitLabel: string;
+      listingType: UnitListingType;
+      bedrooms?: number;
+      bathrooms?: number;
+      squareFeet?: number;
+      rentCents?: number;
+      isAvailable?: boolean;
+    }>,
+  ) => Promise<void>;
+  onCreateBed: (unitId: string, payload: { bedLabel: string; rentCents?: number; isAvailable?: boolean }) => Promise<void>;
+  onUpdateBed: (
+    unitId: string,
+    bedId: string,
+    payload: Partial<{ bedLabel: string; rentCents?: number; isAvailable?: boolean }>,
+  ) => Promise<void>;
+}) {
+  const [addingUnit, setAddingUnit] = useState(false);
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
+  const [addingBedForUnitId, setAddingBedForUnitId] = useState<string | null>(null);
+  const [editingBedId, setEditingBedId] = useState<string | null>(null);
+
+  return (
+    <div style={{ marginTop: 16, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ margin: 0, fontSize: 15 }}>Units & rooms</h3>
+        {!addingUnit && (
+          <button
+            onClick={() => setAddingUnit(true)}
+            style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${theme.border}`, background: 'white', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Add unit
+          </button>
+        )}
+      </div>
+      <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 8, marginBottom: 12 }}>
+        List the whole place as one unit, or break it into individually-priced rooms — and, for a shared
+        room, individually-priced beds.
+      </p>
+
+      {addingUnit && (
+        <UnitForm
+          onSave={async (payload) => {
+            await onCreateUnit(payload);
+            setAddingUnit(false);
+          }}
+          onCancel={() => setAddingUnit(false)}
+        />
+      )}
+
+      <div style={{ display: 'grid', gap: 10, marginTop: addingUnit ? 12 : 0 }}>
+        {units.map((u) => (
+          <div key={u.id} style={{ border: `1px solid ${theme.border}`, borderRadius: 8, padding: 12 }}>
+            {editingUnitId === u.id ? (
+              <UnitForm
+                initial={u}
+                onSave={async (payload) => {
+                  await onUpdateUnit(u.id, payload);
+                  setEditingUnitId(null);
+                }}
+                onCancel={() => setEditingUnitId(null)}
+              />
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <strong style={{ fontSize: 14 }}>
+                    {u.unitLabel} — {LISTING_TYPE_LABEL[u.listingType]}
+                  </strong>
+                  <button
+                    onClick={() => setEditingUnitId(u.id)}
+                    style={{ border: `1px solid ${theme.border}`, background: 'white', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>
+                  {u.bedrooms ?? '—'} beds | {u.bathrooms ?? '—'} baths{u.squareFeet ? ` | ${u.squareFeet} sqft` : ''}
+                </div>
+                <div style={{ fontSize: 13, marginTop: 4 }}>
+                  {formatMoney(u.rentCents)} ·{' '}
+                  <span style={{ fontWeight: 700, color: u.isAvailable ? theme.success : theme.textMuted }}>
+                    {u.isAvailable ? 'Available' : 'Not available'}
+                  </span>
+                </div>
+              </>
+            )}
+
+            {u.listingType === 'SHARED_ROOM' && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${theme.border}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: theme.textMuted }}>BEDS</span>
+                  {addingBedForUnitId !== u.id && (
+                    <button
+                      onClick={() => setAddingBedForUnitId(u.id)}
+                      style={{ border: `1px solid ${theme.border}`, background: 'white', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
+                    >
+                      Add bed
+                    </button>
+                  )}
+                </div>
+
+                {addingBedForUnitId === u.id && (
+                  <BedForm
+                    onSave={async (payload) => {
+                      await onCreateBed(u.id, payload);
+                      setAddingBedForUnitId(null);
+                    }}
+                    onCancel={() => setAddingBedForUnitId(null)}
+                  />
+                )}
+
+                <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                  {u.beds.length === 0 && !addingBedForUnitId && (
+                    <p style={{ fontSize: 12, color: theme.textMuted, margin: 0 }}>No beds listed yet.</p>
+                  )}
+                  {u.beds.map((bed) =>
+                    editingBedId === bed.id ? (
+                      <BedForm
+                        key={bed.id}
+                        initial={bed}
+                        onSave={async (payload) => {
+                          await onUpdateBed(u.id, bed.id, payload);
+                          setEditingBedId(null);
+                        }}
+                        onCancel={() => setEditingBedId(null)}
+                      />
+                    ) : (
+                      <div key={bed.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: `1px solid ${theme.border}`, borderRadius: 6, padding: '6px 10px' }}>
+                        <div>
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>{bed.bedLabel}</span>{' '}
+                          <span style={{ fontSize: 12, color: theme.textMuted }}>{formatMoney(bed.rentCents)}</span>{' '}
+                          <span style={{ fontSize: 12, fontWeight: 700, color: bed.isAvailable ? theme.success : theme.textMuted }}>
+                            {bed.isAvailable ? 'Available' : 'Not available'}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => setEditingBedId(bed.id)}
+                          style={{ border: `1px solid ${theme.border}`, background: 'white', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function UnitForm({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial?: UnitSummary;
+  onSave: (payload: {
+    unitLabel: string;
+    listingType: UnitListingType;
+    bedrooms?: number;
+    bathrooms?: number;
+    squareFeet?: number;
+    rentCents?: number;
+    isAvailable?: boolean;
+  }) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [unitLabel, setUnitLabel] = useState(initial?.unitLabel ?? '');
+  const [listingType, setListingType] = useState(initial?.listingType ?? 'ENTIRE_PLACE');
+  const [bedrooms, setBedrooms] = useState(initial?.bedrooms?.toString() ?? '');
+  const [bathrooms, setBathrooms] = useState(initial?.bathrooms?.toString() ?? '');
+  const [squareFeet, setSquareFeet] = useState(initial?.squareFeet?.toString() ?? '');
+  const [rent, setRent] = useState(initial?.rentCents !== null && initial?.rentCents !== undefined ? (initial.rentCents / 100).toString() : '');
+  const [isAvailable, setIsAvailable] = useState(initial?.isAvailable ?? true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        unitLabel,
+        listingType,
+        bedrooms: bedrooms.trim() ? parseInt(bedrooms, 10) : undefined,
+        bathrooms: bathrooms.trim() ? parseFloat(bathrooms) : undefined,
+        squareFeet: squareFeet.trim() ? parseInt(squareFeet, 10) : undefined,
+        rentCents: rent.trim() ? Math.round(parseFloat(rent) * 100) : undefined,
+        isAvailable,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save unit');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <label style={{ ...unitsManagerLabelStyle, flex: 1 }}>
+          Label (e.g. "Bedroom 2")
+          <input value={unitLabel} onChange={(e) => setUnitLabel(e.target.value)} maxLength={60} style={unitsManagerInputStyle} />
+        </label>
+        <label style={{ ...unitsManagerLabelStyle, flex: 1 }}>
+          Listing type
+          <select value={listingType} onChange={(e) => setListingType(e.target.value as UnitListingType)} style={unitsManagerInputStyle}>
+            {LISTING_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <label style={{ ...unitsManagerLabelStyle, flex: 1 }}>
+          Bedrooms
+          <input type="number" min={0} max={20} value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} style={unitsManagerInputStyle} />
+        </label>
+        <label style={{ ...unitsManagerLabelStyle, flex: 1 }}>
+          Bathrooms
+          <input type="number" min={0} max={20} step="0.5" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} style={unitsManagerInputStyle} />
+        </label>
+        <label style={{ ...unitsManagerLabelStyle, flex: 1 }}>
+          Square feet
+          <input type="number" min={0} value={squareFeet} onChange={(e) => setSquareFeet(e.target.value)} style={unitsManagerInputStyle} />
+        </label>
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+        <label style={{ ...unitsManagerLabelStyle, flex: 1 }}>
+          Rent ($/month) {listingType === 'SHARED_ROOM' ? '— set per bed below' : ''}
+          <input type="number" min={0} value={rent} onChange={(e) => setRent(e.target.value)} style={unitsManagerInputStyle} disabled={listingType === 'SHARED_ROOM'} />
+        </label>
+        <label style={{ ...unitsManagerLabelStyle, flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <input type="checkbox" checked={isAvailable} onChange={(e) => setIsAvailable(e.target.checked)} />
+          Available now
+        </label>
+      </div>
+      {error && <p style={{ color: theme.danger, fontSize: 12 }}>{error}</p>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={submit}
+          disabled={saving || !unitLabel.trim()}
+          style={{ border: 'none', background: theme.primary, color: 'white', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+        >
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={saving}
+          style={{ border: `1px solid ${theme.border}`, background: 'white', borderRadius: 6, padding: '6px 14px', fontSize: 13, cursor: 'pointer' }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BedForm({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial?: BedSummary;
+  onSave: (payload: { bedLabel: string; rentCents?: number; isAvailable?: boolean }) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [bedLabel, setBedLabel] = useState(initial?.bedLabel ?? '');
+  const [rent, setRent] = useState(initial?.rentCents !== null && initial?.rentCents !== undefined ? (initial.rentCents / 100).toString() : '');
+  const [isAvailable, setIsAvailable] = useState(initial?.isAvailable ?? true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        bedLabel,
+        rentCents: rent.trim() ? Math.round(parseFloat(rent) * 100) : undefined,
+        isAvailable,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save bed');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 8, padding: 10, border: `1px solid ${theme.border}`, borderRadius: 6 }}>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <label style={{ ...unitsManagerLabelStyle, flex: 1 }}>
+          Bed label (e.g. "Bed A")
+          <input value={bedLabel} onChange={(e) => setBedLabel(e.target.value)} maxLength={60} style={unitsManagerInputStyle} />
+        </label>
+        <label style={{ ...unitsManagerLabelStyle, flex: 1 }}>
+          Rent ($/month)
+          <input type="number" min={0} value={rent} onChange={(e) => setRent(e.target.value)} style={unitsManagerInputStyle} />
+        </label>
+        <label style={{ ...unitsManagerLabelStyle, flex: 1, display: 'flex', alignItems: 'center', gap: 6, marginTop: 18 }}>
+          <input type="checkbox" checked={isAvailable} onChange={(e) => setIsAvailable(e.target.checked)} />
+          Available
+        </label>
+      </div>
+      {error && <p style={{ color: theme.danger, fontSize: 12 }}>{error}</p>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={submit}
+          disabled={saving || !bedLabel.trim()}
+          style={{ border: 'none', background: theme.primary, color: 'white', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+        >
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={saving}
+          style={{ border: `1px solid ${theme.border}`, background: 'white', borderRadius: 6, padding: '6px 14px', fontSize: 13, cursor: 'pointer' }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }

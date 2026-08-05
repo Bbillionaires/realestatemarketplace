@@ -7,6 +7,8 @@ import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitDto } from './dto/update-unit.dto';
+import { CreateBedDto } from './dto/create-bed.dto';
+import { UpdateBedDto } from './dto/update-bed.dto';
 import { AssignManagerDto } from './dto/assign-manager.dto';
 import { JoinWaitlistDto } from './dto/join-waitlist.dto';
 import { RentEstimateQueryDto } from './dto/rent-estimate-query.dto';
@@ -118,6 +120,34 @@ export class PropertiesController {
     @Body() dto: UpdateUnitDto,
   ) {
     return this.propertiesService.updateUnit(user, id, unitId, dto);
+  }
+
+  @Get(':id/units/:unitId/beds')
+  listBeds(@Param('id') id: string, @Param('unitId') unitId: string) {
+    return this.propertiesService.listBeds(id, unitId);
+  }
+
+  @Post(':id/units/:unitId/beds')
+  @AuditLog('property.create_bed', 'Bed')
+  createBed(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('unitId') unitId: string,
+    @Body() dto: CreateBedDto,
+  ) {
+    return this.propertiesService.createBed(user, id, unitId, dto);
+  }
+
+  @Patch(':id/units/:unitId/beds/:bedId')
+  @AuditLog('property.update_bed', 'Bed')
+  updateBed(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('unitId') unitId: string,
+    @Param('bedId') bedId: string,
+    @Body() dto: UpdateBedDto,
+  ) {
+    return this.propertiesService.updateBed(user, id, unitId, bedId, dto);
   }
 
   @Post(':id/waitlist')

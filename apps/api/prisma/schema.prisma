@@ -237,6 +237,18 @@ enum IdSubmissionStatus {
   CANCELLED
 }
 
+enum UnitListingType {
+  // The whole unit is rented as one — today's only behavior, and the
+  // default so existing units are unaffected.
+  ENTIRE_PLACE
+  // A single bedroom within the unit, rented individually; the tenant has
+  // exclusive use of that room but shares common areas.
+  PRIVATE_ROOM
+  // A room shared by multiple tenants, each renting their own Bed within
+  // it rather than the room as a whole.
+  SHARED_ROOM
+}
+
 enum GigJobStatus {
   OPEN
   CLAIMED
@@ -509,14 +521,42 @@ model PropertyUnit {
   squareFeet  Int?
   rentCents   Int?
   isAvailable Boolean  @default(true)
+  // ENTIRE_PLACE (default) rents the whole unit as one, matching the
+  // platform's original behavior. PRIVATE_ROOM/SHARED_ROOM mark a unit as
+  // itself being one bedroom of a larger home rented room-by-room; a
+  // SHARED_ROOM's actual rentable sub-listings live in `beds` below.
+  listingType UnitListingType @default(ENTIRE_PLACE)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   conversations Conversation[]
   applications  Application[]
   leases        Lease[]
+  beds          Bed[]
 
   @@unique([propertyId, unitLabel])
+}
+
+// A single bed within a SHARED_ROOM unit — individually rentable, with its
+// own rent, availability, and inquiry thread, the same shape as
+// PropertyUnit itself but one level finer. Meaningless for
+// ENTIRE_PLACE/PRIVATE_ROOM units, which are rented as a whole.
+model Bed {
+  id          String       @id @default(uuid())
+  unitId      String
+  unit        PropertyUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  bedLabel    String
+  rentCents   Int?
+  isAvailable Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  conversations Conversation[]
+  applications  Application[]
+  leases        Lease[]
+
+  @@unique([unitId, bedLabel])
+  @@index([unitId])
 }
 
 model PropertyManagerAssignment {
@@ -624,6 +664,8 @@ model Conversation {
   property          Property           @relation(fields: [propertyId], references: [id])
   unitId            String?
   unit              PropertyUnit?      @relation(fields: [unitId], references: [id])
+  bedId             String?
+  bed               Bed?               @relation(fields: [bedId], references: [id])
   tenantId          String
   tenant            User               @relation("ConversationTenant", fields: [tenantId], references: [id])
   landlordId        String
@@ -972,6 +1014,8 @@ model Application {
   propertyId     String
   unitId         String?
   unit           PropertyUnit?     @relation(fields: [unitId], references: [id])
+  bedId          String?
+  bed            Bed?              @relation(fields: [bedId], references: [id])
   status         ApplicationStatus @default(STARTED)
   submittedAt    DateTime?
   decisionAt     DateTime?
@@ -991,6 +1035,8 @@ model Lease {
   propertyId     String
   unitId         String?
   unit           PropertyUnit? @relation(fields: [unitId], references: [id])
+  bedId          String?
+  bed            Bed?          @relation(fields: [bedId], references: [id])
   tenantId       String
   landlordId     String
   status         LeaseStatus @default(PENDING)

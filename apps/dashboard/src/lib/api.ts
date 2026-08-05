@@ -49,6 +49,16 @@ export interface TokenPair {
   expiresIn: string;
 }
 
+export type UnitListingType = 'ENTIRE_PLACE' | 'PRIVATE_ROOM' | 'SHARED_ROOM';
+
+export interface BedSummary {
+  id: string;
+  unitId: string;
+  bedLabel: string;
+  rentCents: number | null;
+  isAvailable: boolean;
+}
+
 export interface UnitSummary {
   id: string;
   propertyId: string;
@@ -58,6 +68,8 @@ export interface UnitSummary {
   squareFeet: number | null;
   rentCents: number | null;
   isAvailable: boolean;
+  listingType: UnitListingType;
+  beds: BedSummary[];
 }
 
 export type PropertyType = 'APARTMENT' | 'HOUSE' | 'CONDO' | 'TOWNHOME' | 'OTHER';
@@ -152,6 +164,13 @@ export interface CreateUnitPayload {
   bedrooms?: number;
   bathrooms?: number;
   squareFeet?: number;
+  rentCents?: number;
+  isAvailable?: boolean;
+  listingType?: UnitListingType;
+}
+
+export interface CreateBedPayload {
+  bedLabel: string;
   rentCents?: number;
   isAvailable?: boolean;
 }
@@ -332,6 +351,8 @@ export interface ConversationSummary {
   property: { id: string; title: string; addressLine1: string; city: string; state: string };
   unitId: string | null;
   unitLabel: string | null;
+  bedId: string | null;
+  bedLabel: string | null;
   tenantDisplayName: string;
   landlordDisplayName: string;
   relayPhoneNumber: string | null;
@@ -491,6 +512,18 @@ export const api = {
       { method: 'PATCH', body: JSON.stringify(payload) },
       accessToken,
     ),
+  createBed: (accessToken: string, propertyId: string, unitId: string, payload: CreateBedPayload) =>
+    request<BedSummary>(
+      `/properties/${propertyId}/units/${unitId}/beds`,
+      { method: 'POST', body: JSON.stringify(payload) },
+      accessToken,
+    ),
+  updateBed: (accessToken: string, propertyId: string, unitId: string, bedId: string, payload: Partial<CreateBedPayload>) =>
+    request<BedSummary>(
+      `/properties/${propertyId}/units/${unitId}/beds/${bedId}`,
+      { method: 'PATCH', body: JSON.stringify(payload) },
+      accessToken,
+    ),
   listNearbySchools: (accessToken: string, propertyId: string) =>
     request<NearbySchool[]>(`/properties/${propertyId}/schools`, {}, accessToken),
   refreshNearbySchools: (accessToken: string, propertyId: string) =>
@@ -528,8 +561,10 @@ export const api = {
   },
   getConversation: (accessToken: string, id: string) =>
     request<ConversationSummary>(`/conversations/${id}`, {}, accessToken),
-  startConversation: (accessToken: string, payload: { propertyId: string; unitId?: string; message: string }) =>
-    request<StartConversationResult>('/conversations', { method: 'POST', body: JSON.stringify(payload) }, accessToken),
+  startConversation: (
+    accessToken: string,
+    payload: { propertyId: string; unitId?: string; bedId?: string; message: string },
+  ) => request<StartConversationResult>('/conversations', { method: 'POST', body: JSON.stringify(payload) }, accessToken),
   listMessages: (accessToken: string, conversationId: string) =>
     request<MessageSummary[]>(`/conversations/${conversationId}/messages`, {}, accessToken),
   sendMessage: (accessToken: string, conversationId: string, content: string) =>

@@ -1,4 +1,5 @@
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import { UnitListingType } from '@prisma/client';
 
 export class CreateUnitDto {
   @IsString()
@@ -31,4 +32,10 @@ export class CreateUnitDto {
   @IsOptional()
   @IsBoolean()
   isAvailable?: boolean;
+
+  // Defaults to ENTIRE_PLACE (the unit is rented as a whole) if omitted —
+  // matches every unit created before this field existed.
+  @IsOptional()
+  @IsEnum(UnitListingType)
+  listingType?: UnitListingType;
 }

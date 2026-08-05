@@ -29,6 +29,8 @@ export class ConversationResponseDto {
   property!: { id: string; title: string; addressLine1: string; city: string; state: string };
   unitId!: string | null;
   unitLabel!: string | null;
+  bedId!: string | null;
+  bedLabel!: string | null;
   tenantDisplayName!: string;
   landlordDisplayName!: string;
   relayPhoneNumber!: string | null;
@@ -47,6 +49,8 @@ export class ConversationResponseDto {
       tenantId: string;
       unitId: string | null;
       unit?: { unitLabel: string } | null;
+      bedId: string | null;
+      bed?: { bedLabel: string } | null;
       status: ConversationStatus;
       applicationStatus: ApplicationStatus;
       leaseStatus: LeaseStatus;
@@ -65,6 +69,8 @@ export class ConversationResponseDto {
     dto.property = conversation.property;
     dto.unitId = conversation.unitId;
     dto.unitLabel = conversation.unit?.unitLabel ?? null;
+    dto.bedId = conversation.bedId;
+    dto.bedLabel = conversation.bed?.bedLabel ?? null;
     dto.tenantDisplayName = `Tenant #${anonymizedNumber(conversation.tenantId)}`;
     dto.landlordDisplayName = conversation.landlord.profile?.displayName ?? 'Property Management';
     const activeAssignment = (conversation.relayAssignments ?? []).find((a) => !a.releasedAt);

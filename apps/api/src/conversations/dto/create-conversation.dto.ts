@@ -8,6 +8,10 @@ export class CreateConversationDto {
   @IsUUID()
   unitId?: string;
 
+  @IsOptional()
+  @IsUUID()
+  bedId?: string;
+
   @IsString()
   @MinLength(1)
   @MaxLength(1600)

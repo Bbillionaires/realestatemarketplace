@@ -13,7 +13,9 @@ import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitDto } from './dto/update-unit.dto';
-import { PropertyResponseDto, UnitResponseDto } from './dto/property-response.dto';
+import { CreateBedDto } from './dto/create-bed.dto';
+import { UpdateBedDto } from './dto/update-bed.dto';
+import { PropertyResponseDto, UnitResponseDto, BedResponseDto } from './dto/property-response.dto';
 import { WaitlistEntryResponseDto } from './dto/waitlist-entry-response.dto';
 import { AgencyResponseDto } from './dto/agency-response.dto';
 import { NearbySchoolResponseDto } from './dto/nearby-school-response.dto';
@@ -34,7 +36,7 @@ const STAFF_ROLES: Role[] = [Role.STAFF_MODERATOR, Role.ADMINISTRATOR, Role.SUPE
 const PROPERTY_INCLUDE = {
   owner: { include: { profile: true } },
   managerAssignments: true,
-  units: true,
+  units: { include: { beds: true } },
 } as const;
 
 @Injectable()
@@ -232,8 +234,55 @@ export class PropertiesService {
   }
 
   async listUnits(id: string): Promise<UnitResponseDto[]> {
-    const units = await this.prisma.propertyUnit.findMany({ where: { propertyId: id } });
+    const units = await this.prisma.propertyUnit.findMany({ where: { propertyId: id }, include: { beds: true } });
     return units.map((u) => UnitResponseDto.from(u));
+  }
+
+  async createBed(actor: AuthenticatedUser, propertyId: string, unitId: string, dto: CreateBedDto): Promise<BedResponseDto> {
+    const unit = await this.getOwnUnit(actor, propertyId, unitId);
+    const bed = await this.prisma.bed.create({ data: { unitId: unit.id, ...dto } });
+    return BedResponseDto.from(bed);
+  }
+
+  async updateBed(
+    actor: AuthenticatedUser,
+    propertyId: string,
+    unitId: string,
+    bedId: string,
+    dto: UpdateBedDto,
+  ): Promise<BedResponseDto> {
+    await this.getOwnUnit(actor, propertyId, unitId);
+    const bed = await this.prisma.bed.findFirst({ where: { id: bedId, unitId } });
+    if (!bed) {
+      throw new NotFoundException('Bed not found');
+    }
+
+    const updated = await this.prisma.bed.update({ where: { id: bedId }, data: { ...dto } });
+    return BedResponseDto.from(updated);
+  }
+
+  async listBeds(propertyId: string, unitId: string): Promise<BedResponseDto[]> {
+    const unit = await this.prisma.propertyUnit.findFirst({ where: { id: unitId, propertyId } });
+    if (!unit) {
+      throw new NotFoundException('Unit not found');
+    }
+    const beds = await this.prisma.bed.findMany({ where: { unitId }, orderBy: { bedLabel: 'asc' } });
+    return beds.map((b) => BedResponseDto.from(b));
+  }
+
+  /** Loads the unit, checking it belongs to the property and the actor can manage the property. */
+  private async getOwnUnit(actor: AuthenticatedUser, propertyId: string, unitId: string) {
+    const property = await this.prisma.property.findUnique({ where: { id: propertyId }, include: PROPERTY_INCLUDE });
+    if (!property) {
+      throw new NotFoundException('Property not found');
+    }
+    await this.assertCanManage(actor, property);
+
+    const unit = await this.prisma.propertyUnit.findFirst({ where: { id: unitId, propertyId } });
+    if (!unit) {
+      throw new NotFoundException('Unit not found');
+    }
+    return unit;
   }
 
   async listNearbySchools(propertyId: string): Promise<NearbySchoolResponseDto[]> {

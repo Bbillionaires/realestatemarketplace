@@ -46,8 +46,14 @@ apps/
       phone/             OTP phone verification (encrypted storage, masked responses)
       properties/        Property + unit CRUD, manager assignment; geocodes the address (and refreshes a
                          cached nearby-schools list) on create/update; address-specific, radius-based
-                         rent estimate (not a city/zip bucket average)
-      conversations/     Tenant-starts-conversation flow, relay assignment, RBAC
+                         rent estimate (not a city/zip bucket average). A unit's `listingType`
+                         (ENTIRE_PLACE/PRIVATE_ROOM/SHARED_ROOM) lets a landlord list individual rooms
+                         instead of always renting the whole property as one; a SHARED_ROOM unit's actual
+                         rentable sub-listings are its Beds — each with its own rent and availability,
+                         nested one CRUD level under `/properties/:id/units/:unitId/beds`
+      conversations/     Tenant-starts-conversation flow, relay assignment, RBAC. Optionally scoped to a
+                         specific unit and/or bed (a bedId implies its parent unit, so the caller doesn't
+                         have to resolve and send both)
       messages/          Compose/list, moderation gate, SMS relay send, inbound ingestion
       moderation/        Contact-info detector (regex/normalization/pattern/keyword), message-
                          history split-detection + AI-fallback layer (pluggable, mocked), violation
@@ -88,7 +94,11 @@ apps/
       config/            Env loading + validation
     test/                e2e tests (supertest against a real Nest app + test DB)
   dashboard/             Next.js dashboard
-    src/app/properties/          Browse + detail pages (photo, tabs, sticky "Message Landlord" bar)
+    src/app/properties/          Browse + detail pages (photo, tabs, sticky "Message Landlord" bar).
+                                  The detail page's "Available rooms" section shows every individually-
+                                  priced room/bed to tenants (only rendered when a property actually uses
+                                  room-level listings); the owner/manager-only "Units & rooms" panel is
+                                  full CRUD over units and, for a shared room, its beds
     src/app/inbox/                Conversation list — property/status filters, unread indicator, unit label, last-message preview
     src/app/conversations/[id]/   Message thread + reply box, showing panel, live Socket.IO updates (polling only as a fallback)
     src/app/moderation/           Staff-only moderator dashboard: flag queue, review, violation/restriction history, admin notes, account suspend/restore, and an admin-only per-moderator suspend-permission toggle
@@ -305,6 +315,16 @@ renewed, and renewing extends the period from whichever is later — its old end
 top-up/renew while one is already awaiting payment is rejected (400), and only the original poster can
 close their own listing, which also blocks any further top-up.
 
+**Rooms and beds** (`test/rooms-and-beds.e2e-spec.ts`) — a unit's `listingType` defaults to `ENTIRE_PLACE`
+when omitted (every unit created before this feature existed is unaffected) and can be set to
+`PRIVATE_ROOM` or `SHARED_ROOM`; only the property's owner/manager/staff can create a unit or a bed on
+it (403 for anyone else), and a bed can only be created through the property it actually belongs to — the
+same unit id under a *different* property's URL is rejected (404), never silently accepted. Beds are
+returned nested under their unit in the property response. A conversation can be scoped to a specific
+bed — the parent unit is filled in automatically from the bed so the caller doesn't have to resolve and
+send both — and a bedId that disagrees with an explicitly-given unitId, or belongs to a different
+property entirely, is rejected (400).
+
 ## API surface
 
 All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webhooks/*` requires
@@ -326,11 +346,12 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | GET/POST | `/properties`, `/properties/:id` | Role-shaped response (see above) |
 | PATCH | `/properties/:id` | Owner, assigned manager, or staff/admin |
 | POST/PATCH | `/properties/:id/managers`, `/managers/:userId/revoke` | |
-| GET/POST/PATCH | `/properties/:id/units`, `/units/:unitId` | |
+| GET/POST/PATCH | `/properties/:id/units`, `/units/:unitId` | `listingType` (ENTIRE_PLACE/PRIVATE_ROOM/SHARED_ROOM) defaults to ENTIRE_PLACE |
+| GET/POST/PATCH | `/properties/:id/units/:unitId/beds`, `/beds/:bedId` | Individually-rentable beds within a SHARED_ROOM unit |
 | GET | `/properties/:id/schools` | Cached nearby-schools list (name, level, rating, distance) |
 | POST | `/properties/:id/schools/refresh` | Owner/manager/staff only — forces a re-geocode + schools refresh |
 | GET | `/properties/rent-estimate` | Address-specific (not city/zip-bucketed): geocodes `addressLine1`/`city`/`state`/`zip` and averages rent from units within a radius of those coordinates |
-| POST | `/conversations` | Tenant-only: starts (or reuses) a conversation + sends the first message |
+| POST | `/conversations` | Tenant-only: starts (or reuses) a conversation + sends the first message. Optional `unitId`/`bedId` scopes it to a specific room/bed |
 | GET | `/conversations`, `/conversations/:id` | Participant (or staff/admin) only |
 | GET/POST | `/conversations/:id/messages` | Send runs the moderation gate before any relay/forward |
 | POST | `/sms/webhooks/inbound` | Carrier webhook — routes to a conversation, or texts back a disambiguation menu |

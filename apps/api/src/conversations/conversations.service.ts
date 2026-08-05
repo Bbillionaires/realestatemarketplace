@@ -17,6 +17,7 @@ const TENANT_ROLES: Role[] = [Role.PROSPECTIVE_TENANT, Role.CURRENT_TENANT];
 const CONVERSATION_INCLUDE = {
   property: { select: { id: true, title: true, addressLine1: true, city: true, state: true } },
   unit: { select: { unitLabel: true } },
+  bed: { select: { bedLabel: true } },
   tenant: { include: { profile: true } },
   landlord: { include: { profile: true } },
   relayAssignments: { include: { relayNumber: true } },
@@ -54,6 +55,22 @@ export class ConversationsService {
       }
     }
 
+    // A bedId implies which unit it's under — if the caller also passed a
+    // unitId, it must agree; if not, it's filled in from the bed itself so
+    // "message about this specific bed" doesn't require the caller to also
+    // resolve and send the parent unit.
+    let effectiveUnitId = dto.unitId;
+    if (dto.bedId) {
+      const bed = await this.prisma.bed.findFirst({ where: { id: dto.bedId }, include: { unit: true } });
+      if (!bed || bed.unit.propertyId !== dto.propertyId) {
+        throw new BadRequestException('Bed does not belong to this property');
+      }
+      if (dto.unitId && bed.unitId !== dto.unitId) {
+        throw new BadRequestException('Bed does not belong to the given unit');
+      }
+      effectiveUnitId = bed.unitId;
+    }
+
     const landlordId = property.managerAssignments[0]?.userId ?? property.ownerId;
 
     let conversation = await this.prisma.conversation.findFirst({
@@ -71,7 +88,8 @@ export class ConversationsService {
       const created = await this.prisma.conversation.create({
         data: {
           propertyId: dto.propertyId,
-          unitId: dto.unitId ?? null,
+          unitId: effectiveUnitId ?? null,
+          bedId: dto.bedId ?? null,
           tenantId: actor.id,
           landlordId,
           participants: {
