@@ -5,5 +5,6 @@ import { JobReferralsService } from './job-referrals.service';
 @Module({
   controllers: [JobReferralsController],
   providers: [JobReferralsService],
+  exports: [JobReferralsService],
 })
 export class JobReferralsModule {}

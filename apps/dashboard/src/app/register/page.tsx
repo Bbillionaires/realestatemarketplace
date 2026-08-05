@@ -11,6 +11,7 @@ const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: 'PROSPECTIVE_TENANT', label: "I'm looking for a place to rent" },
   { value: 'LANDLORD', label: 'I own property I want to list' },
   { value: 'PROPERTY_MANAGER', label: 'I manage property for an owner' },
+  { value: 'EMPLOYER', label: "I'm hiring and want to reach tenants on the platform" },
 ];
 
 const SERVICE_PROVIDER_QUESTIONS: {

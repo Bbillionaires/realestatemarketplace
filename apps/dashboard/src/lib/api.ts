@@ -234,7 +234,8 @@ export interface GigVoucher {
   createdAt: string;
 }
 
-export type JobReferralStatus = 'ACTIVE' | 'CLOSED';
+export type JobReferralStatus = 'PENDING_PAYMENT' | 'ACTIVE' | 'CLOSED';
+export type JobReferralPendingOperation = 'ACTIVATE' | 'TOPUP' | 'RENEW';
 
 export interface JobReferral {
   id: string;
@@ -250,6 +251,14 @@ export interface JobReferral {
   status: JobReferralStatus;
   closedAt: string | null;
   createdAt: string;
+  sponsored: boolean;
+  costPerClickCents: number | null;
+  monthlyFeeCents: number | null;
+  budgetRemainingCents: number;
+  clickCount: number;
+  currentPeriodEnd: string | null;
+  pendingOperation: JobReferralPendingOperation | null;
+  checkoutUrl: string | null;
 }
 
 export type LenderAccessTier = 'BASIC' | 'PREMIUM';
@@ -682,4 +691,24 @@ export const api = {
   ) => request<JobReferral>('/job-referrals', { method: 'POST', body: JSON.stringify(payload) }, accessToken),
   closeJobReferral: (accessToken: string, id: string) =>
     request<JobReferral>(`/job-referrals/${id}/close`, { method: 'PATCH' }, accessToken),
+  createSponsoredJobListing: (
+    accessToken: string,
+    payload: {
+      title: string;
+      employerName: string;
+      location: string;
+      applyUrl: string;
+      contactInfo?: string;
+      description?: string;
+      costPerClickCents: number;
+      monthlyFeeCents: number;
+      initialBudgetCents: number;
+    },
+  ) => request<JobReferral>('/job-referrals/sponsored', { method: 'POST', body: JSON.stringify(payload) }, accessToken),
+  topUpJobListing: (accessToken: string, id: string, additionalBudgetCents: number) =>
+    request<JobReferral>(`/job-referrals/${id}/topup`, { method: 'POST', body: JSON.stringify({ additionalBudgetCents }) }, accessToken),
+  renewJobListing: (accessToken: string, id: string) =>
+    request<JobReferral>(`/job-referrals/${id}/renew`, { method: 'POST' }, accessToken),
+  clickJobReferral: (accessToken: string, id: string) =>
+    request<{ applyUrl: string }>(`/job-referrals/${id}/click`, { method: 'POST' }, accessToken),
 };

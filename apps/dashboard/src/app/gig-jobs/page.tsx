@@ -19,6 +19,12 @@ const TENANT_ROLES = ['PROSPECTIVE_TENANT', 'CURRENT_TENANT'];
 const OWN_TENANT_POSTER_ROLES = ['LANDLORD', 'PROPERTY_MANAGER'];
 const ADMIN_ROLES = ['ADMINISTRATOR', 'SUPER_ADMINISTRATOR'];
 
+const SPONSORED_STATUS_LABEL: Record<string, string> = {
+  PENDING_PAYMENT: 'Awaiting payment',
+  ACTIVE: 'Active',
+  CLOSED: 'Closed',
+};
+
 const STATUS_LABEL: Record<string, string> = {
   OPEN: 'Open',
   CLAIMED: 'Claimed',
@@ -61,6 +67,7 @@ export default function GigJobsPage() {
   const isOwnTenantPoster = !!user && OWN_TENANT_POSTER_ROLES.includes(user.role);
   const isAdminPoster = !!user && ADMIN_ROLES.includes(user.role);
   const isPoster = isOwnTenantPoster || isAdminPoster;
+  const isEmployer = !!user && user.role === 'EMPLOYER';
 
   async function refresh() {
     if (!accessToken || !user) return;
@@ -78,6 +85,9 @@ export default function GigJobsPage() {
     }
     if (isOwnTenantPoster) {
       loaders.push(api.listProperties(accessToken).then(setProperties));
+    }
+    if (isEmployer) {
+      loaders.push(api.listPostedJobReferrals(accessToken).then(setPostedReferrals));
     }
     await Promise.all(loaders);
   }
@@ -219,6 +229,62 @@ export default function GigJobsPage() {
       setError(err instanceof Error ? err.message : 'Failed to mark referral filled');
     } finally {
       setBusyJobId(null);
+    }
+  }
+
+  async function handlePostSponsored(payload: {
+    title: string;
+    employerName: string;
+    location: string;
+    applyUrl: string;
+    contactInfo?: string;
+    description?: string;
+    costPerClickCents: number;
+    monthlyFeeCents: number;
+    initialBudgetCents: number;
+  }) {
+    if (!accessToken) return;
+    const listing = await api.createSponsoredJobListing(accessToken, payload);
+    if (listing.checkoutUrl) {
+      window.location.href = listing.checkoutUrl;
+    }
+  }
+
+  async function handleTopUp(id: string, additionalBudgetCents: number) {
+    if (!accessToken || additionalBudgetCents <= 0) return;
+    setBusyJobId(id);
+    try {
+      const updated = await api.topUpJobListing(accessToken, id, additionalBudgetCents);
+      if (updated.checkoutUrl) {
+        window.location.href = updated.checkoutUrl;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start top-up payment');
+      setBusyJobId(null);
+    }
+  }
+
+  async function handleRenew(id: string) {
+    if (!accessToken) return;
+    setBusyJobId(id);
+    try {
+      const updated = await api.renewJobListing(accessToken, id);
+      if (updated.checkoutUrl) {
+        window.location.href = updated.checkoutUrl;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start renewal payment');
+      setBusyJobId(null);
+    }
+  }
+
+  async function handleSponsoredClick(id: string) {
+    if (!accessToken) return;
+    try {
+      const { applyUrl } = await api.clickJobReferral(accessToken, id);
+      window.open(applyUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to open this listing');
     }
   }
 
@@ -519,16 +585,44 @@ export default function GigJobsPage() {
           </div>
         )}
 
+        {isEmployer && (
+          <div style={cardStyle}>
+            <h2 style={{ fontSize: 16, marginTop: 0 }}>Sponsored job listings</h2>
+            <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 0 }}>
+              A paid, self-serve ad — visible to every tenant on the platform, not just one landlord's.
+              Billed per click against a prepaid budget, plus a small recurring monthly fee.
+            </p>
+            <SponsoredPostForm onSubmit={handlePostSponsored} />
+            {postedReferrals.length === 0 ? (
+              <p style={{ color: theme.textMuted, fontSize: 13 }}>No sponsored listings yet.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+                {postedReferrals.map((r) => (
+                  <SponsoredListingRow
+                    key={r.id}
+                    listing={r}
+                    onTopUp={handleTopUp}
+                    onRenew={handleRenew}
+                    onClose={handleCloseReferral}
+                    busy={busyJobId === r.id}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {isTenant && referrals.length > 0 && (
           <div style={cardStyle}>
             <h2 style={{ fontSize: 16, marginTop: 0 }}>Job openings</h2>
             <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 0 }}>
               Shared by landlords/managers or platform staff — these are real external jobs, not paid
-              gigs on this platform, and don't produce a voucher.
+              gigs on this platform, and don't produce a voucher. Listings marked "Sponsored" are paid
+              ads from employer accounts, shown platform-wide.
             </p>
             <div style={{ display: 'grid', gap: 10 }}>
               {referrals.map((r) => (
-                <ReferralRow key={r.id} referral={r} canClose={false} busy={false} />
+                <ReferralRow key={r.id} referral={r} canClose={false} busy={false} onSponsoredClick={handleSponsoredClick} />
               ))}
             </div>
           </div>
@@ -644,11 +738,13 @@ function ReferralRow({
   canClose,
   onClose,
   busy,
+  onSponsoredClick,
 }: {
   referral: JobReferral;
   canClose: boolean;
   onClose?: (id: string) => void;
   busy: boolean;
+  onSponsoredClick?: (id: string) => void;
 }) {
   return (
     <div style={{ border: `1px solid ${theme.border}`, borderRadius: 8, padding: 12 }}>
@@ -656,21 +752,38 @@ function ReferralRow({
         <strong style={{ fontSize: 14 }}>
           {referral.title} — {referral.employerName}
         </strong>
-        {referral.status === 'CLOSED' && (
-          <span style={{ fontSize: 11, color: theme.textMuted, fontWeight: 700 }}>FILLED</span>
-        )}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {referral.sponsored && (
+            <span style={{ fontSize: 10, color: theme.primary, fontWeight: 700, border: `1px solid ${theme.primary}`, borderRadius: 4, padding: '1px 6px' }}>
+              SPONSORED
+            </span>
+          )}
+          {referral.status === 'CLOSED' && (
+            <span style={{ fontSize: 11, color: theme.textMuted, fontWeight: 700 }}>FILLED</span>
+          )}
+        </div>
       </div>
       <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{referral.location}</div>
       {referral.description && <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 4 }}>{referral.description}</div>}
       {referral.contactInfo && (
         <div style={{ fontSize: 12, color: theme.text, marginTop: 4 }}>Contact: {referral.contactInfo}</div>
       )}
-      {referral.applyUrl && (
+      {referral.applyUrl && referral.sponsored && (
+        <button
+          onClick={() => onSponsoredClick?.(referral.id)}
+          style={{ border: 'none', background: 'none', color: theme.primary, fontSize: 12, padding: 0, marginTop: 4, cursor: 'pointer', textDecoration: 'underline' }}
+        >
+          Apply here →
+        </button>
+      )}
+      {referral.applyUrl && !referral.sponsored && (
         <a href={referral.applyUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: theme.primary, display: 'inline-block', marginTop: 4 }}>
           Apply here →
         </a>
       )}
-      <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>Shared by {referral.posterDisplayName}</div>
+      <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>
+        {referral.sponsored ? `Sponsored by ${referral.employerName}` : `Shared by ${referral.posterDisplayName}`}
+      </div>
       {canClose && referral.status === 'ACTIVE' && (
         <button
           onClick={() => onClose?.(referral.id)}
@@ -678,6 +791,212 @@ function ReferralRow({
           style={{ marginTop: 8, border: `1px solid ${theme.border}`, background: 'white', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
         >
           Mark filled
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SponsoredPostForm({
+  onSubmit,
+}: {
+  onSubmit: (payload: {
+    title: string;
+    employerName: string;
+    location: string;
+    applyUrl: string;
+    contactInfo?: string;
+    description?: string;
+    costPerClickCents: number;
+    monthlyFeeCents: number;
+    initialBudgetCents: number;
+  }) => Promise<void>;
+}) {
+  const [title, setTitle] = useState('');
+  const [employerName, setEmployerName] = useState('');
+  const [location, setLocation] = useState('');
+  const [applyUrl, setApplyUrl] = useState('');
+  const [contactInfo, setContactInfo] = useState('');
+  const [description, setDescription] = useState('');
+  const [costPerClick, setCostPerClick] = useState('0.50');
+  const [monthlyFee, setMonthlyFee] = useState('5');
+  const [initialBudget, setInitialBudget] = useState('10');
+  const [posting, setPosting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const smallInput = {
+    width: '100%',
+    padding: '8px 10px',
+    marginTop: 4,
+    borderRadius: 6,
+    border: `1px solid ${theme.border}`,
+    fontSize: 13,
+    boxSizing: 'border-box' as const,
+    fontFamily: 'inherit',
+  };
+  const smallLabel = { display: 'block', marginBottom: 10, fontSize: 12, color: theme.textMuted, fontWeight: 600 };
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setPosting(true);
+    setError(null);
+    try {
+      await onSubmit({
+        title,
+        employerName,
+        location,
+        applyUrl,
+        contactInfo: contactInfo || undefined,
+        description: description || undefined,
+        costPerClickCents: dollarsToCents(costPerClick),
+        monthlyFeeCents: dollarsToCents(monthlyFee),
+        initialBudgetCents: dollarsToCents(initialBudget),
+      });
+      // A successful submit redirects to checkout, so there's nothing to reset here.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create sponsored listing');
+      setPosting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <label style={{ ...smallLabel, flex: 1 }}>
+          Job title
+          <input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={150} style={smallInput} />
+        </label>
+        <label style={{ ...smallLabel, flex: 1 }}>
+          Employer
+          <input value={employerName} onChange={(e) => setEmployerName(e.target.value)} required maxLength={150} style={smallInput} />
+        </label>
+      </div>
+      <label style={smallLabel}>
+        Location
+        <input value={location} onChange={(e) => setLocation(e.target.value)} required maxLength={300} style={smallInput} />
+      </label>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <label style={{ ...smallLabel, flex: 1 }}>
+          Apply URL
+          <input value={applyUrl} onChange={(e) => setApplyUrl(e.target.value)} required type="url" style={smallInput} />
+        </label>
+        <label style={{ ...smallLabel, flex: 1 }}>
+          Contact info (optional)
+          <input value={contactInfo} onChange={(e) => setContactInfo(e.target.value)} maxLength={200} style={smallInput} />
+        </label>
+      </div>
+      <label style={smallLabel}>
+        Notes (optional)
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={1000} style={smallInput} />
+      </label>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <label style={{ ...smallLabel, flex: 1 }}>
+          Cost per click ($)
+          <input type="number" min={0.25} step="0.05" value={costPerClick} onChange={(e) => setCostPerClick(e.target.value)} required style={smallInput} />
+        </label>
+        <label style={{ ...smallLabel, flex: 1 }}>
+          Monthly fee ($)
+          <input type="number" min={5} step="1" value={monthlyFee} onChange={(e) => setMonthlyFee(e.target.value)} required style={smallInput} />
+        </label>
+        <label style={{ ...smallLabel, flex: 1 }}>
+          Initial click budget ($)
+          <input type="number" min={1} step="1" value={initialBudget} onChange={(e) => setInitialBudget(e.target.value)} required style={smallInput} />
+        </label>
+      </div>
+      {error && <p style={{ color: theme.danger, fontSize: 12 }}>{error}</p>}
+      <button
+        type="submit"
+        disabled={posting}
+        style={{ border: 'none', background: theme.primary, color: 'white', borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+      >
+        {posting ? 'Starting checkout...' : 'Continue to payment'}
+      </button>
+    </form>
+  );
+}
+
+function SponsoredListingRow({
+  listing,
+  onTopUp,
+  onRenew,
+  onClose,
+  busy,
+}: {
+  listing: JobReferral;
+  onTopUp: (id: string, additionalBudgetCents: number) => void;
+  onRenew: (id: string) => void;
+  onClose: (id: string) => void;
+  busy: boolean;
+}) {
+  const [topUpAmount, setTopUpAmount] = useState('');
+
+  return (
+    <div style={{ border: `1px solid ${theme.border}`, borderRadius: 8, padding: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <strong style={{ fontSize: 14 }}>
+          {listing.title} — {listing.employerName}
+        </strong>
+        <span style={{ fontSize: 12, fontWeight: 700, color: theme.primary }}>
+          {SPONSORED_STATUS_LABEL[listing.status] ?? listing.status}
+        </span>
+      </div>
+      <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{listing.location}</div>
+      <div style={{ fontSize: 12, color: theme.text, marginTop: 6 }}>
+        {formatMoney(listing.costPerClickCents ?? 0)}/click · {formatMoney(listing.monthlyFeeCents ?? 0)}/month
+      </div>
+      <div style={{ fontSize: 12, color: theme.text, marginTop: 2 }}>
+        Budget remaining: {formatMoney(listing.budgetRemainingCents)} · Billed clicks: {listing.clickCount}
+      </div>
+      {listing.currentPeriodEnd && (
+        <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 2 }}>
+          Period ends {new Date(listing.currentPeriodEnd).toLocaleDateString()}
+        </div>
+      )}
+
+      {listing.pendingOperation && listing.checkoutUrl && (
+        <a
+          href={listing.checkoutUrl}
+          style={{ display: 'inline-block', marginTop: 8, border: 'none', background: theme.primary, color: 'white', borderRadius: 6, padding: '6px 12px', fontSize: 12, textDecoration: 'none' }}
+        >
+          Complete payment
+        </a>
+      )}
+
+      {listing.status === 'ACTIVE' && !listing.pendingOperation && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            value={topUpAmount}
+            onChange={(e) => setTopUpAmount(e.target.value)}
+            placeholder="Add budget ($)"
+            type="number"
+            min={1}
+            step="1"
+            style={{ width: 110, padding: 6, borderRadius: 6, border: `1px solid ${theme.border}`, fontSize: 12 }}
+          />
+          <button
+            onClick={() => onTopUp(listing.id, dollarsToCents(topUpAmount))}
+            disabled={busy || !topUpAmount}
+            style={{ border: `1px solid ${theme.border}`, background: 'white', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}
+          >
+            Top up
+          </button>
+          <button
+            onClick={() => onRenew(listing.id)}
+            disabled={busy}
+            style={{ border: `1px solid ${theme.border}`, background: 'white', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}
+          >
+            Renew
+          </button>
+        </div>
+      )}
+
+      {listing.status !== 'CLOSED' && (
+        <button
+          onClick={() => onClose(listing.id)}
+          disabled={busy}
+          style={{ marginTop: 8, display: 'block', border: 'none', background: 'none', color: theme.danger, fontSize: 12, padding: 0, cursor: 'pointer' }}
+        >
+          Close listing
         </button>
       )}
     </div>

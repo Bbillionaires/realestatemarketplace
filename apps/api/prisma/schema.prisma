@@ -30,6 +30,7 @@ enum Role {
   LANDLORD
   PROPERTY_MANAGER
   LENDER
+  EMPLOYER
   STAFF_MODERATOR
   ADMINISTRATOR
   SUPER_ADMINISTRATOR
@@ -250,8 +251,20 @@ enum GigVoucherStatus {
 }
 
 enum JobReferralStatus {
+  // Sponsored listings only — created but not yet paid for, so not shown to anyone.
+  PENDING_PAYMENT
   ACTIVE
   CLOSED
+}
+
+// Which billing effect a sponsored listing's currently-in-flight checkout will
+// apply once its payment webhook confirms. Cleared back to null after the
+// webhook is processed, which is also what makes a replayed webhook event a
+// safe no-op.
+enum JobReferralPendingOperation {
+  ACTIVATE
+  TOPUP
+  RENEW
 }
 
 enum ConsentType {
@@ -332,6 +345,7 @@ model User {
   gigVouchersReceived   GigVoucher[]                 @relation("GigVoucherTenant")
   gigVouchersIssued     GigVoucher[]                 @relation("GigVoucherLandlord")
   jobReferralsPosted    JobReferral[]                @relation("JobReferralPoster")
+  jobReferralClicks     JobReferralClick[]           @relation("JobReferralClickTenant")
 
   @@index([role])
 }
@@ -879,6 +893,15 @@ model GigVoucher {
 // no payment/voucher fields at all, unlike GigJob. Visibility scoping
 // mirrors GigJob (own tenants via an existing Conversation, or
 // platform-wide for admins) without any of GigJob's liability surface.
+//
+// The `sponsored` variant of this same model is the opposite of that: a
+// self-serve, prepaid advertisement an EMPLOYER (or admin, on an employer's
+// behalf) pays the platform to run — same Google/Facebook-Ads shape as
+// every other paid job board. It bypasses the own-tenant scoping entirely
+// (that's what the money buys: reach across the whole platform) and is
+// billed per click against a prepaid budget plus a small recurring monthly
+// fee, both charged through the same PaymentProvider checkout every other
+// paid flow in this app uses.
 model JobReferral {
   id           String            @id @default(uuid())
   posterId     String
@@ -895,8 +918,46 @@ model JobReferral {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
+  // --- Sponsored (paid) listings only; null/0 for organic referrals. ---
+  sponsored            Boolean   @default(false)
+  costPerClickCents    Int?
+  monthlyFeeCents      Int?
+  budgetRemainingCents Int       @default(0)
+  // Billed clicks only — a click that arrives after the budget is already
+  // exhausted still lets the tenant through to the employer's apply link,
+  // it just isn't charged or counted here.
+  clickCount           Int       @default(0)
+  currentPeriodEnd     DateTime?
+  pendingOperation     JobReferralPendingOperation?
+  // The budget-cents portion of whatever checkout is currently in flight
+  // (0 for a pure RENEW, since that only pays the monthly fee).
+  pendingBudgetCents   Int?
+  paymentProviderCheckoutId String?
+  paymentOrderId       String?
+  checkoutUrl          String?
+
+  clicks JobReferralClick[]
+
   @@index([posterId])
   @@index([status])
+  @@index([paymentOrderId])
+}
+
+// One billable click on a sponsored JobReferral. The unique constraint is
+// the entire fraud-prevention mechanism here: at most one billed click per
+// tenant per calendar day per listing, so refreshing the page or clicking
+// twice never double-charges the employer.
+model JobReferralClick {
+  id            String      @id @default(uuid())
+  jobReferralId String
+  jobReferral   JobReferral @relation(fields: [jobReferralId], references: [id], onDelete: Cascade)
+  tenantId      String
+  tenant        User        @relation("JobReferralClickTenant", fields: [tenantId], references: [id], onDelete: Cascade)
+  clickDate     String
+  createdAt     DateTime    @default(now())
+
+  @@unique([jobReferralId, tenantId, clickDate])
+  @@index([jobReferralId])
 }
 
 // ---------------------------------------------------------------------------

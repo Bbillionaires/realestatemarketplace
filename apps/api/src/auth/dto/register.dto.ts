@@ -10,6 +10,7 @@ export const SELF_SERVICE_ROLES = [
   Role.PROSPECTIVE_TENANT,
   Role.LANDLORD,
   Role.PROPERTY_MANAGER,
+  Role.EMPLOYER,
 ] as const;
 
 export type SelfServiceRole = (typeof SELF_SERVICE_ROLES)[number];
@@ -29,7 +30,7 @@ export class RegisterDto {
   displayName!: string;
 
   @IsIn(SELF_SERVICE_ROLES, {
-    message: 'role must be one of PROSPECTIVE_TENANT, LANDLORD, PROPERTY_MANAGER',
+    message: 'role must be one of PROSPECTIVE_TENANT, LANDLORD, PROPERTY_MANAGER, EMPLOYER',
   })
   role!: SelfServiceRole;
 

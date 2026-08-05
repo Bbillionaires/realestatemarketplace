@@ -68,7 +68,13 @@ apps/
                          opening (e.g. "McDonald's is hiring") that the poster doesn't control and isn't
                          paying for — pure information-sharing, so unlike gig-jobs there's no voucher, no
                          PaymentProvider charge, and no completion/claim workflow at all. Visibility uses
-                         the same own-tenant-via-Conversation / admin-platform-wide scoping as gig-jobs
+                         the same own-tenant-via-Conversation / admin-platform-wide scoping as gig-jobs.
+                         The same model also carries `sponsored` listings: a self-serve, prepaid ad an
+                         EMPLOYER account pays the platform to run (same shape as any other job board),
+                         billed per click against a prepaid budget plus a small recurring monthly fee,
+                         both charged through the existing PaymentProvider checkout. A sponsored listing
+                         bypasses the own-tenant scoping entirely and shows to every tenant on the
+                         platform — that reach is exactly what the employer is paying for
       payments/          PaymentProvider interface, Mock provider, Square provider (Payment Links API
                          + webhook signature verification) — shared by id-submissions and gig-jobs
       geocoding/         GeocodingProvider interface, Mock provider, US Census Bureau provider
@@ -89,7 +95,9 @@ apps/
     src/components/ShowingPanel.tsx  Propose/accept/cancel a showing time slot from the thread
     src/components/IdSubmissionPanel.tsx  Pay the $5 fee, then submit an ID file, from the thread
     src/app/gig-jobs/              Post/browse/claim/complete gig jobs, pay out, and manage rent vouchers,
-                                    plus a separate "Job openings" section for no-voucher job referrals
+                                    plus a "Job openings" section for no-voucher job referrals and (for
+                                    EMPLOYER accounts) a self-serve sponsored-listing dashboard — post,
+                                    pay via checkout, track budget/clicks, top up, and renew
     src/app/mock-checkout/         Dev-only stand-in for Square's hosted checkout page (PAYMENT_PROVIDER=mock)
     src/lib/use-conversation-socket.ts  Socket.IO client hook used by the conversation thread
 docker/
@@ -282,6 +290,21 @@ invalid `applyUrl` is rejected (400); and only the original poster can mark thei
 (another landlord gets 403, a second close attempt gets 400) — once closed it stops appearing in the
 tenant-facing list but still shows as `CLOSED` in the poster's own list.
 
+**Sponsored job listings** (`test/sponsored-job-listings.e2e-spec.ts`) — only an EMPLOYER account (or
+admin, on an employer's behalf) can create one (403 for a landlord or tenant), and the initial budget
+must cover at least one click at the chosen cost-per-click (400 otherwise); a listing sits in
+`PENDING_PAYMENT` and is invisible to every tenant until its checkout webhook confirms, at which point
+it's shown to *every* tenant regardless of which landlord they rent from — proving the own-tenant
+scoping is bypassed entirely, which is the whole point of paying. A click is billed against the prepaid
+budget and is idempotent per tenant per calendar day (a same-day repeat click isn't charged again); once
+the budget can't cover one more click the listing stops appearing and stops billing, but a tenant who
+already has the (stale) apply link is still let through — running out of budget is only ever the
+employer's problem. A top-up or renew payment reactivates it; forcing a listing's billing period into
+the past proves it both disappears from the tenant list and rejects a click attempt (400) until
+renewed, and renewing extends the period from whichever is later — its old end date or now. A second
+top-up/renew while one is already awaiting payment is rejected (400), and only the original poster can
+close their own listing, which also blocks any further top-up.
+
 ## API surface
 
 All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webhooks/*` requires
@@ -318,7 +341,7 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | GET/POST | `/conversations/:id/id-submissions` | Tenant-only: starts (or reuses) a $5 ID-submission checkout for that conversation |
 | PATCH | `/id-submissions/:id/cancel` | Tenant cancels their own unpaid submission |
 | POST | `/id-submissions/:id/submit` | Tenant uploads the ID file once paid — emailed to the current landlord-side contact, never stored |
-| POST | `/payments/webhooks` | Payment processor (or the mock provider's dev checkout page) confirms a completed charge — shared by ID submissions and gig jobs |
+| POST | `/payments/webhooks` | Payment processor (or the mock provider's dev checkout page) confirms a completed charge — shared by ID submissions, gig jobs, and sponsored job listings |
 | GET | `/gig-jobs` | Tenant view: open gigs visible to them (own landlord's + admin's) plus anything they've claimed |
 | GET | `/gig-jobs/posted` | Poster view: every gig this landlord/manager/admin has posted |
 | POST | `/gig-jobs` | Landlord/property manager (scoped to their own tenants) or admin (platform-wide) |
@@ -330,7 +353,11 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | GET | `/job-referrals` | Tenant view: word-of-mouth about external job openings visible to them (own landlord's + admin's) — no voucher, no payment |
 | GET | `/job-referrals/posted` | Poster view: every referral this landlord/manager/admin has posted |
 | POST | `/job-referrals` | Landlord/property manager (scoped to their own tenants) or admin (platform-wide) |
-| PATCH | `/job-referrals/:id/close` | Only the poster can mark their referral filled |
+| PATCH | `/job-referrals/:id/close` | Only the poster can mark their referral filled — also closes a sponsored listing |
+| POST | `/job-referrals/sponsored` | EMPLOYER (or admin, on an employer's behalf) only — creates a `PENDING_PAYMENT` listing and a checkout for the monthly fee + initial click budget |
+| POST | `/job-referrals/:id/topup` | Poster only — checkout to add more click budget to an active sponsored listing |
+| POST | `/job-referrals/:id/renew` | Poster only — checkout to pay the next month's fee and extend the billing period |
+| POST | `/job-referrals/:id/click` | Tenant-only — bills one click against the sponsored listing's budget (idempotent per tenant per day) and always returns the apply URL |
 | GET | `/moderation/flags` | Staff/admin only — filterable by `status`; defaults to `FLAGGED`+`UNDER_REVIEW` |
 | GET/PATCH | `/moderation/flags/:id`, `/flags/:id/review` | Review a flag: clear / keep under review / confirm block, with an optional note |
 | GET | `/moderation/users/:userId/violations`, `/restrictions` | Staff/admin only |

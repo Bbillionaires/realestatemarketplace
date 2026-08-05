@@ -1,4 +1,4 @@
-import { JobReferralStatus, Role } from '@prisma/client';
+import { JobReferralPendingOperation, JobReferralStatus, Role } from '@prisma/client';
 
 export class JobReferralResponseDto {
   id!: string;
@@ -15,6 +15,16 @@ export class JobReferralResponseDto {
   closedAt!: Date | null;
   createdAt!: Date;
 
+  // Sponsored (paid) listings only.
+  sponsored!: boolean;
+  costPerClickCents!: number | null;
+  monthlyFeeCents!: number | null;
+  budgetRemainingCents!: number;
+  clickCount!: number;
+  currentPeriodEnd!: Date | null;
+  pendingOperation!: JobReferralPendingOperation | null;
+  checkoutUrl!: string | null;
+
   static from(referral: {
     id: string;
     posterId: string;
@@ -29,6 +39,14 @@ export class JobReferralResponseDto {
     status: JobReferralStatus;
     closedAt: Date | null;
     createdAt: Date;
+    sponsored: boolean;
+    costPerClickCents: number | null;
+    monthlyFeeCents: number | null;
+    budgetRemainingCents: number;
+    clickCount: number;
+    currentPeriodEnd: Date | null;
+    pendingOperation: JobReferralPendingOperation | null;
+    checkoutUrl: string | null;
   }): JobReferralResponseDto {
     const dto = new JobReferralResponseDto();
     dto.id = referral.id;
@@ -44,6 +62,14 @@ export class JobReferralResponseDto {
     dto.status = referral.status;
     dto.closedAt = referral.closedAt;
     dto.createdAt = referral.createdAt;
+    dto.sponsored = referral.sponsored;
+    dto.costPerClickCents = referral.costPerClickCents;
+    dto.monthlyFeeCents = referral.monthlyFeeCents;
+    dto.budgetRemainingCents = referral.budgetRemainingCents;
+    dto.clickCount = referral.clickCount;
+    dto.currentPeriodEnd = referral.currentPeriodEnd;
+    dto.pendingOperation = referral.pendingOperation;
+    dto.checkoutUrl = referral.checkoutUrl ?? null;
     return dto;
   }
 }

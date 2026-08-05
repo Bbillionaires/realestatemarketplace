@@ -3,6 +3,7 @@ import { Request } from 'express';
 import { Public } from '../common/decorators/public.decorator';
 import { IdSubmissionsService } from './id-submissions.service';
 import { GigJobsService } from '../gig-jobs/gig-jobs.service';
+import { JobReferralsService } from '../job-referrals/job-referrals.service';
 
 /**
  * Unauthenticated by JWT — the payment processor (or the mock provider's
@@ -19,6 +20,7 @@ export class PaymentWebhooksController {
   constructor(
     private readonly idSubmissionsService: IdSubmissionsService,
     private readonly gigJobsService: GigJobsService,
+    private readonly jobReferralsService: JobReferralsService,
   ) {}
 
   @Post()
@@ -32,6 +34,7 @@ export class PaymentWebhooksController {
     const rawBody = JSON.stringify(body);
     await this.idSubmissionsService.handlePaymentWebhook(signature ?? '', url, rawBody);
     await this.gigJobsService.handlePaymentWebhook(signature ?? '', url, rawBody);
+    await this.jobReferralsService.handlePaymentWebhook(signature ?? '', url, rawBody);
     return { status: 'ok' };
   }
 }
