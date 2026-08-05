@@ -156,6 +156,20 @@ export interface CreateUnitPayload {
   isAvailable?: boolean;
 }
 
+export type SchoolLevel = 'PRESCHOOL' | 'ELEMENTARY' | 'MIDDLE' | 'HIGH' | 'OTHER';
+export type SchoolType = 'PUBLIC' | 'PRIVATE' | 'CHARTER' | 'OTHER';
+
+export interface NearbySchool {
+  id: string;
+  name: string;
+  schoolType: SchoolType;
+  level: SchoolLevel;
+  rating: number | null;
+  distanceMiles: number | null;
+  address: string | null;
+  websiteUrl: string | null;
+}
+
 export interface AgencySummary {
   id: string;
   displayName: string;
@@ -165,9 +179,9 @@ export interface AgencySummary {
 export interface RentEstimate {
   estimatedMonthlyRentCents: number | null;
   sampleSize: number;
-  city?: string;
-  state?: string;
+  radiusMiles: number;
   bedrooms?: number;
+  addressResolved: boolean;
 }
 
 export interface WaitlistEntry {
@@ -410,11 +424,20 @@ export const api = {
       { method: 'PATCH', body: JSON.stringify(payload) },
       accessToken,
     ),
+  listNearbySchools: (accessToken: string, propertyId: string) =>
+    request<NearbySchool[]>(`/properties/${propertyId}/schools`, {}, accessToken),
+  refreshNearbySchools: (accessToken: string, propertyId: string) =>
+    request<NearbySchool[]>(`/properties/${propertyId}/schools/refresh`, { method: 'POST' }, accessToken),
   listAgencies: (accessToken: string) => request<AgencySummary[]>('/properties/agencies', {}, accessToken),
-  getRentEstimate: (accessToken: string, params: { city?: string; state?: string; bedrooms?: number }) => {
+  getRentEstimate: (
+    accessToken: string,
+    params: { addressLine1: string; city: string; state: string; zip: string; bedrooms?: number },
+  ) => {
     const qs = new URLSearchParams();
-    if (params.city) qs.set('city', params.city);
-    if (params.state) qs.set('state', params.state);
+    qs.set('addressLine1', params.addressLine1);
+    qs.set('city', params.city);
+    qs.set('state', params.state);
+    qs.set('zip', params.zip);
     if (params.bedrooms !== undefined) qs.set('bedrooms', String(params.bedrooms));
     return request<RentEstimate>(`/properties/rent-estimate?${qs.toString()}`, {}, accessToken);
   },

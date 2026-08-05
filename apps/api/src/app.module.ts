@@ -11,6 +11,8 @@ import { AuditModule } from './audit/audit.module';
 import { SmsModule } from './sms/sms.module';
 import { EmailModule } from './email/email.module';
 import { PaymentsModule } from './payments/payments.module';
+import { GeocodingModule } from './geocoding/geocoding.module';
+import { SchoolsModule } from './schools/schools.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { PhoneModule } from './phone/phone.module';
@@ -53,6 +55,8 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     SmsModule,
     EmailModule,
     PaymentsModule,
+    GeocodingModule,
+    SchoolsModule,
     AuthModule,
     UsersModule,
     PhoneModule,

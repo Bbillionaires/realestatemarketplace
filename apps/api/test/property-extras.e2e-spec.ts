@@ -2,20 +2,24 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { MockGeocodingProvider } from '../src/geocoding/providers/mock-geocoding.provider';
 import { createTestApp, resetDatabase } from './utils/test-app';
 
 describe('Property extras: type/Section8 filters, agencies, rent estimate, waitlists (e2e)', () => {
   let app: INestApplication;
   let moduleRef: TestingModule;
   let prisma: PrismaService;
+  let mockGeocoding: MockGeocodingProvider;
 
   beforeAll(async () => {
     ({ app, moduleRef } = await createTestApp());
     prisma = moduleRef.get(PrismaService);
+    mockGeocoding = moduleRef.get(MockGeocodingProvider);
   });
 
   beforeEach(async () => {
     await resetDatabase(prisma);
+    mockGeocoding.clear();
   });
 
   afterAll(async () => {
@@ -133,18 +137,34 @@ describe('Property extras: type/Section8 filters, agencies, rent estimate, waitl
   });
 
   describe('Rental estimate', () => {
-    it('averages rentCents across matching units and reports the sample size', async () => {
-      const landlordToken = await registerUser('LANDLORD', 'landlord-estimate@example.com');
+    const nearAddress = { addressLine1: '10 Near St', city: 'Jacksonville', state: 'FL', zip: '32202' };
+    const nearCoords = { latitude: 30.3322, longitude: -81.6557 };
+    // ~11 miles away — well outside the default 1.5-mile comp radius.
+    const farAddress = { addressLine1: '20 Far St', city: 'Jacksonville', state: 'FL', zip: '32218' };
+    const farCoords = { latitude: 30.49, longitude: -81.6557 };
+
+    async function createGeocodedProperty(
+      landlordToken: string,
+      address: typeof nearAddress,
+      coords: typeof nearCoords,
+      rentCents: number,
+      bedrooms = 2,
+    ) {
+      mockGeocoding.setCoordinatesFor(address, coords);
       const created = await request(app.getHttpServer())
         .post('/api/properties')
         .set('Authorization', `Bearer ${landlordToken}`)
-        .send({ ...basePayload, city: 'EstimateCity', state: 'FL' });
-      const propertyId = created.body.id;
-
+        .send({ ...basePayload, ...address });
       await request(app.getHttpServer())
-        .post(`/api/properties/${propertyId}/units`)
+        .post(`/api/properties/${created.body.id}/units`)
         .set('Authorization', `Bearer ${landlordToken}`)
-        .send({ unitLabel: '1', bedrooms: 2, rentCents: 100000 });
+        .send({ unitLabel: '1', bedrooms, rentCents });
+      return created.body.id as string;
+    }
+
+    it('averages rentCents across nearby units at the same address and reports the sample size', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-estimate@example.com');
+      const propertyId = await createGeocodedProperty(landlordToken, nearAddress, nearCoords, 100000);
       await request(app.getHttpServer())
         .post(`/api/properties/${propertyId}/units`)
         .set('Authorization', `Bearer ${landlordToken}`)
@@ -152,21 +172,50 @@ describe('Property extras: type/Section8 filters, agencies, rent estimate, waitl
 
       const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-estimate@example.com');
       const res = await request(app.getHttpServer())
-        .get('/api/properties/rent-estimate?city=EstimateCity&state=FL&bedrooms=2')
+        .get(
+          `/api/properties/rent-estimate?addressLine1=${encodeURIComponent(nearAddress.addressLine1)}&city=${nearAddress.city}&state=${nearAddress.state}&zip=${nearAddress.zip}&bedrooms=2`,
+        )
         .set('Authorization', `Bearer ${tenantToken}`);
       expect(res.status).toBe(200);
       expect(res.body.estimatedMonthlyRentCents).toBe(150000);
       expect(res.body.sampleSize).toBe(2);
+      expect(res.body.addressResolved).toBe(true);
     });
 
-    it('returns null with a zero sample size when nothing matches', async () => {
+    it('excludes comps outside the configured radius even in the same city', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-estimate-radius@example.com');
+      await createGeocodedProperty(landlordToken, nearAddress, nearCoords, 100000);
+      await createGeocodedProperty(landlordToken, farAddress, farCoords, 500000);
+
+      const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-estimate-radius@example.com');
+      const res = await request(app.getHttpServer())
+        .get(
+          `/api/properties/rent-estimate?addressLine1=${encodeURIComponent(nearAddress.addressLine1)}&city=${nearAddress.city}&state=${nearAddress.state}&zip=${nearAddress.zip}&bedrooms=2`,
+        )
+        .set('Authorization', `Bearer ${tenantToken}`);
+      expect(res.status).toBe(200);
+      // Only the near property's rent is included — the far one is excluded despite matching city/state.
+      expect(res.body.estimatedMonthlyRentCents).toBe(100000);
+      expect(res.body.sampleSize).toBe(1);
+    });
+
+    it('returns null with a zero sample size when nothing is nearby', async () => {
       const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-estimate-empty@example.com');
       const res = await request(app.getHttpServer())
-        .get('/api/properties/rent-estimate?city=NowhereVille&state=ZZ&bedrooms=9')
+        .get('/api/properties/rent-estimate?addressLine1=999+Nowhere+Rd&city=NowhereVille&state=ZZ&zip=00000&bedrooms=9')
         .set('Authorization', `Bearer ${tenantToken}`);
       expect(res.status).toBe(200);
       expect(res.body.estimatedMonthlyRentCents).toBeNull();
       expect(res.body.sampleSize).toBe(0);
+      expect(res.body.addressResolved).toBe(true);
+    });
+
+    it('rejects a rent-estimate request missing the required address fields', async () => {
+      const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-estimate-invalid@example.com');
+      const res = await request(app.getHttpServer())
+        .get('/api/properties/rent-estimate?city=Jacksonville&state=FL')
+        .set('Authorization', `Bearer ${tenantToken}`);
+      expect(res.status).toBe(400);
     });
   });
 

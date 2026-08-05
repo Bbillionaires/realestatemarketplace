@@ -26,6 +26,8 @@ phone number.
 | Dashboard | **Next.js** (App Router) |
 | SMS | Provider-agnostic `SmsProvider` interface; Mock provider now, Twilio/Telnyx implementations are a drop-in for Phase 5 |
 | Payments | Provider-agnostic `PaymentProvider` interface (hosted checkout + webhook); Mock provider now, Square (Payment Links API, supports Cash App Pay) is the configured real processor |
+| Geocoding | Provider-agnostic `GeocodingProvider` interface; Mock provider now, US Census Bureau geocoder (free, keyless) is the configured real one |
+| Nearby schools | Provider-agnostic `SchoolsProvider` interface; Mock provider now, GreatSchools NearbySchools API is the configured real one |
 | Auth | JWT access tokens + rotating opaque refresh tokens, Argon2id password hashing |
 | Containerization | Docker + Docker Compose |
 
@@ -42,7 +44,9 @@ apps/
       auth/             Register, login, refresh rotation
       users/             Profiles, admin user management, RBAC role changes
       phone/             OTP phone verification (encrypted storage, masked responses)
-      properties/        Property + unit CRUD, manager assignment
+      properties/        Property + unit CRUD, manager assignment; geocodes the address (and refreshes a
+                         cached nearby-schools list) on create/update; address-specific, radius-based
+                         rent estimate (not a city/zip bucket average)
       conversations/     Tenant-starts-conversation flow, relay assignment, RBAC
       messages/          Compose/list, moderation gate, SMS relay send, inbound ingestion
       moderation/        Contact-info detector (regex/normalization/pattern/keyword), message-
@@ -56,6 +60,8 @@ apps/
                          conversation (owner or assigned property manager) and never persisted
       payments/          PaymentProvider interface, Mock provider, Square provider (Payment Links API
                          + webhook signature verification)
+      geocoding/         GeocodingProvider interface, Mock provider, US Census Bureau provider
+      schools/           SchoolsProvider interface, Mock provider, GreatSchools provider
       realtime/          Socket.IO gateway broadcasting new messages / conversation / showing updates
       sms/               SmsProvider interface, Mock provider, inbound/delivery webhooks, routing
       audit/             AuditLog service + admin endpoint
@@ -233,6 +239,17 @@ history-split case added to `test/conversations.e2e-spec.ts`) —
   emails the ID file straight to the landlord-side contact and is rejected a second time; the
   tenant can cancel an unpaid submission.
 
+**Geocoding, nearby schools, and address-specific rent estimates**
+(`test/nearby-schools.e2e-spec.ts`, `test/property-extras.e2e-spec.ts`) —
+- **Nearby schools**: creating a property automatically geocodes its address and populates a cached
+  nearby-schools list (readable by anyone, refreshable by the owner/manager/staff only); updating a
+  property's address re-triggers the refresh, while updating unrelated fields (e.g. rent) leaves the
+  cached schools/`schoolsFetchedAt` untouched.
+- **Rent estimate**: proven address-specific rather than city/zip-bucketed by placing two properties
+  in the *same city* at controlled mock coordinates ~11 miles apart — the far one's rent is excluded
+  from the estimate for an address near the first, while an identical-address query still averages
+  correctly; an unresolvable address is distinguished from "resolved but no nearby comps."
+
 ## API surface
 
 All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webhooks/*` requires
@@ -255,6 +272,9 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | PATCH | `/properties/:id` | Owner, assigned manager, or staff/admin |
 | POST/PATCH | `/properties/:id/managers`, `/managers/:userId/revoke` | |
 | GET/POST/PATCH | `/properties/:id/units`, `/units/:unitId` | |
+| GET | `/properties/:id/schools` | Cached nearby-schools list (name, level, rating, distance) |
+| POST | `/properties/:id/schools/refresh` | Owner/manager/staff only — forces a re-geocode + schools refresh |
+| GET | `/properties/rent-estimate` | Address-specific (not city/zip-bucketed): geocodes `addressLine1`/`city`/`state`/`zip` and averages rent from units within a radius of those coordinates |
 | POST | `/conversations` | Tenant-only: starts (or reuses) a conversation + sends the first message |
 | GET | `/conversations`, `/conversations/:id` | Participant (or staff/admin) only |
 | GET/POST | `/conversations/:id/messages` | Send runs the moderation gate before any relay/forward |

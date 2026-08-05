@@ -9,6 +9,7 @@ import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitDto } from './dto/update-unit.dto';
 import { AssignManagerDto } from './dto/assign-manager.dto';
 import { JoinWaitlistDto } from './dto/join-waitlist.dto';
+import { RentEstimateQueryDto } from './dto/rent-estimate-query.dto';
 
 @Controller('properties')
 export class PropertiesController {
@@ -46,16 +47,8 @@ export class PropertiesController {
   }
 
   @Get('rent-estimate')
-  rentEstimate(
-    @Query('city') city?: string,
-    @Query('state') state?: string,
-    @Query('bedrooms') bedrooms?: string,
-  ) {
-    return this.propertiesService.estimateRent({
-      city,
-      state,
-      bedrooms: bedrooms ? parseInt(bedrooms, 10) : undefined,
-    });
+  rentEstimate(@Query() query: RentEstimateQueryDto) {
+    return this.propertiesService.estimateRent(query);
   }
 
   @Get('waitlists/me')
@@ -97,6 +90,17 @@ export class PropertiesController {
   @Get(':id/units')
   listUnits(@Param('id') id: string) {
     return this.propertiesService.listUnits(id);
+  }
+
+  @Get(':id/schools')
+  listNearbySchools(@Param('id') id: string) {
+    return this.propertiesService.listNearbySchools(id);
+  }
+
+  @Post(':id/schools/refresh')
+  @AuditLog('property.refresh_schools', 'Property')
+  refreshSchools(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.propertiesService.refreshSchools(user, id);
   }
 
   @Post(':id/units')

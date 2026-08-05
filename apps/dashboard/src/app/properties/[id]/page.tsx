@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   api,
+  NearbySchool,
   PropertySummary,
   SewerSourceType,
   UpdatePropertyPayload,
@@ -43,6 +44,21 @@ const UTILITY_OPTIONS: { value: UtilityType; label: string }[] = [
   { value: 'PARKING', label: 'Parking' },
 ];
 
+const SCHOOL_LEVEL_LABEL: Record<string, string> = {
+  PRESCHOOL: 'Preschool',
+  ELEMENTARY: 'Elementary',
+  MIDDLE: 'Middle school',
+  HIGH: 'High school',
+  OTHER: 'School',
+};
+
+const SCHOOL_TYPE_LABEL: Record<string, string> = {
+  PUBLIC: 'Public',
+  PRIVATE: 'Private',
+  CHARTER: 'Charter',
+  OTHER: 'Other',
+};
+
 function toMonthInput(iso: string | null): string {
   if (!iso) return '';
   return iso.slice(0, 7);
@@ -79,6 +95,11 @@ export default function PropertyDetailPage() {
   const [unitSaving, setUnitSaving] = useState(false);
   const [unitError, setUnitError] = useState<string | null>(null);
 
+  const [schools, setSchools] = useState<NearbySchool[]>([]);
+  const [schoolsLoading, setSchoolsLoading] = useState(false);
+  const [schoolsError, setSchoolsError] = useState<string | null>(null);
+  const [schoolsRefreshing, setSchoolsRefreshing] = useState(false);
+
   const [myWaitlistEntry, setMyWaitlistEntry] = useState<WaitlistEntry | null>(null);
   const [waitlistNote, setWaitlistNote] = useState('');
   const [waitlistBusy, setWaitlistBusy] = useState(false);
@@ -97,6 +118,30 @@ export default function PropertyDetailPage() {
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load property'))
       .finally(() => setLoading(false));
   }, [accessToken, authLoading, id, router]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    setSchoolsLoading(true);
+    api
+      .listNearbySchools(accessToken, id)
+      .then(setSchools)
+      .catch((err) => setSchoolsError(err instanceof Error ? err.message : 'Failed to load nearby schools'))
+      .finally(() => setSchoolsLoading(false));
+  }, [accessToken, id]);
+
+  async function handleRefreshSchools() {
+    if (!accessToken) return;
+    setSchoolsRefreshing(true);
+    setSchoolsError(null);
+    try {
+      const updated = await api.refreshNearbySchools(accessToken, id);
+      setSchools(updated);
+    } catch (err) {
+      setSchoolsError(err instanceof Error ? err.message : 'Failed to refresh nearby schools');
+    } finally {
+      setSchoolsRefreshing(false);
+    }
+  }
 
   useEffect(() => {
     if (!accessToken || !user) return;
@@ -487,6 +532,90 @@ export default function PropertyDetailPage() {
                     <p style={{ color: theme.textMuted }}>
                       Exact showing details and directions are shared through the conversation once a tour is
                       scheduled.
+                    </p>
+                  </div>
+                ),
+              },
+              {
+                label: 'Schools',
+                content: (
+                  <div style={{ fontSize: 14, color: theme.text }}>
+                    {canManage && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                        <button
+                          onClick={handleRefreshSchools}
+                          disabled={schoolsRefreshing}
+                          style={{
+                            border: `1px solid ${theme.border}`,
+                            background: 'white',
+                            borderRadius: 6,
+                            padding: '6px 12px',
+                            fontSize: 12,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {schoolsRefreshing ? 'Refreshing...' : 'Refresh schools'}
+                        </button>
+                      </div>
+                    )}
+                    {schoolsError && <p style={{ color: theme.danger, fontSize: 13 }}>{schoolsError}</p>}
+                    {schoolsLoading ? (
+                      <p style={{ color: theme.textMuted }}>Loading nearby schools...</p>
+                    ) : schools.length === 0 ? (
+                      <p style={{ color: theme.textMuted }}>
+                        No nearby school data yet for this listing.
+                      </p>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {schools.map((school) => (
+                          <div
+                            key={school.id}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              padding: '10px 12px',
+                              borderRadius: 8,
+                              background: theme.bg,
+                              border: `1px solid ${theme.border}`,
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 700 }}>{school.name}</div>
+                              <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>
+                                {SCHOOL_LEVEL_LABEL[school.level] ?? school.level} ·{' '}
+                                {SCHOOL_TYPE_LABEL[school.schoolType] ?? school.schoolType}
+                                {school.distanceMiles !== null ? ` · ${school.distanceMiles.toFixed(1)} mi` : ''}
+                              </div>
+                              {school.address && (
+                                <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>{school.address}</div>
+                              )}
+                            </div>
+                            {school.rating !== null && (
+                              <div
+                                style={{
+                                  flexShrink: 0,
+                                  minWidth: 40,
+                                  textAlign: 'center',
+                                  padding: '6px 10px',
+                                  borderRadius: 8,
+                                  background: theme.primaryLight,
+                                  color: theme.primary,
+                                  fontWeight: 800,
+                                  fontSize: 14,
+                                }}
+                              >
+                                {school.rating}
+                                <span style={{ fontSize: 10, fontWeight: 600 }}>/10</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p style={{ color: theme.textMuted, fontSize: 11, marginTop: 12 }}>
+                      School data and ratings are provided for reference only and may not reflect current
+                      boundaries or enrollment. Confirm with the school district before relying on it.
                     </p>
                   </div>
                 ),

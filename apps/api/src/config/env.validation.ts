@@ -50,6 +50,14 @@ class EnvironmentVariables {
   @IsOptional()
   PAYMENT_PROVIDER?: string;
 
+  @IsIn(['mock', 'census'])
+  @IsOptional()
+  GEOCODING_PROVIDER?: string;
+
+  @IsIn(['mock', 'greatschools'])
+  @IsOptional()
+  SCHOOLS_PROVIDER?: string;
+
   @IsInt()
   @Min(1)
   @IsOptional()

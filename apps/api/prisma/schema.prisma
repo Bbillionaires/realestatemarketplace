@@ -75,6 +75,21 @@ enum WaterSourceType {
   WELL
 }
 
+enum SchoolLevel {
+  PRESCHOOL
+  ELEMENTARY
+  MIDDLE
+  HIGH
+  OTHER
+}
+
+enum SchoolType {
+  PUBLIC
+  PRIVATE
+  CHARTER
+  OTHER
+}
+
 enum ConversationStatus {
   NEW_INQUIRY
   ACTIVE
@@ -394,6 +409,11 @@ model Property {
   country          String   @default("US")
   latitude         Float?
   longitude        Float?
+  // Set the first time the address is successfully geocoded; refreshed
+  // (along with nearbySchools) whenever the address changes. Null means
+  // geocoding hasn't succeeded yet — a transient provider failure at
+  // create/update time never blocks saving the listing itself.
+  schoolsFetchedAt DateTime?
   description      String?
   monthlyRentCents Int?
   depositCents     Int?
@@ -434,9 +454,11 @@ model Property {
   conversations       Conversation[]
   waitlistEntries     PropertyWaitlistEntry[]
   lenderAssignments   LenderAssignment[]
+  nearbySchools       NearbySchool[]
 
   @@index([ownerId])
   @@index([city, state])
+  @@index([latitude, longitude])
 }
 
 model PropertyUnit {
@@ -485,6 +507,28 @@ model PropertyWaitlistEntry {
   createdAt  DateTime @default(now())
 
   @@unique([propertyId, userId])
+  @@index([propertyId])
+}
+
+// Cached result of a SchoolsProvider.findNearby() lookup for a property's
+// geocoded coordinates. Cached (rather than fetched live on every listing
+// view) since the upstream schools API is metered per call and school
+// assignments/ratings change slowly; refreshed whenever the address
+// changes or a refresh is explicitly requested.
+model NearbySchool {
+  id            String     @id @default(uuid())
+  propertyId    String
+  property      Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  externalId    String?
+  name          String
+  schoolType    SchoolType  @default(OTHER)
+  level         SchoolLevel @default(OTHER)
+  rating        Int?
+  distanceMiles Float?
+  address       String?
+  websiteUrl    String?
+  createdAt     DateTime   @default(now())
+
   @@index([propertyId])
 }
 

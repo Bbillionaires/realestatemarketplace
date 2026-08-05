@@ -25,6 +25,12 @@ export interface AppConfig {
     webhookSignatureKey: string;
   };
   idSubmissionFeeCents: number;
+  geocodingProvider: 'mock' | 'census';
+  schoolsProvider: 'mock' | 'greatschools';
+  greatschools: {
+    apiKey: string;
+  };
+  rentEstimateRadiusMiles: number;
   twilio: {
     accountSid: string;
     authToken: string;
@@ -73,6 +79,12 @@ export default (): AppConfig => ({
     webhookSignatureKey: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY ?? '',
   },
   idSubmissionFeeCents: parseInt(process.env.ID_SUBMISSION_FEE_CENTS ?? '500', 10),
+  geocodingProvider: (process.env.GEOCODING_PROVIDER as 'mock' | 'census') ?? 'mock',
+  schoolsProvider: (process.env.SCHOOLS_PROVIDER as 'mock' | 'greatschools') ?? 'mock',
+  greatschools: {
+    apiKey: process.env.GREATSCHOOLS_API_KEY ?? '',
+  },
+  rentEstimateRadiusMiles: parseFloat(process.env.RENT_ESTIMATE_RADIUS_MILES ?? '1.5'),
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
     authToken: process.env.TWILIO_AUTH_TOKEN ?? '',

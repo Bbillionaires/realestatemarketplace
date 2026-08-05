@@ -1,0 +1,1 @@
+export const SCHOOLS_PROVIDER = Symbol('SCHOOLS_PROVIDER');

@@ -1,7 +1,14 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PropertyType, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
+import { AppConfig } from '../config/configuration';
+import { boundingBox, haversineMiles } from '../common/utils/geo.util';
+import { GEOCODING_PROVIDER } from '../geocoding/geocoding.constants';
+import { GeocodingProvider } from '../geocoding/interfaces/geocoding-provider.interface';
+import { SCHOOLS_PROVIDER } from '../schools/schools.constants';
+import { SchoolsProvider } from '../schools/interfaces/schools-provider.interface';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
@@ -9,6 +16,7 @@ import { UpdateUnitDto } from './dto/update-unit.dto';
 import { PropertyResponseDto, UnitResponseDto } from './dto/property-response.dto';
 import { WaitlistEntryResponseDto } from './dto/waitlist-entry-response.dto';
 import { AgencyResponseDto } from './dto/agency-response.dto';
+import { NearbySchoolResponseDto } from './dto/nearby-school-response.dto';
 
 const TENANT_ROLES: Role[] = [Role.PROSPECTIVE_TENANT, Role.CURRENT_TENANT];
 const PROPERTY_TYPE_VALUES: string[] = Object.values(PropertyType);
@@ -16,9 +24,10 @@ const PROPERTY_TYPE_VALUES: string[] = Object.values(PropertyType);
 export interface RentEstimate {
   estimatedMonthlyRentCents: number | null;
   sampleSize: number;
-  city?: string;
-  state?: string;
+  radiusMiles: number;
   bedrooms?: number;
+  /** False when the given address couldn't be geocoded at all — distinct from "geocoded fine, just no comps nearby". */
+  addressResolved: boolean;
 }
 
 const STAFF_ROLES: Role[] = [Role.STAFF_MODERATOR, Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR];
@@ -30,7 +39,14 @@ const PROPERTY_INCLUDE = {
 
 @Injectable()
 export class PropertiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(PropertiesService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService<AppConfig>,
+    @Inject(GEOCODING_PROVIDER) private readonly geocodingProvider: GeocodingProvider,
+    @Inject(SCHOOLS_PROVIDER) private readonly schoolsProvider: SchoolsProvider,
+  ) {}
 
   async create(actor: AuthenticatedUser, dto: CreatePropertyDto): Promise<PropertyResponseDto> {
     if (actor.role !== Role.LANDLORD && !STAFF_ROLES.includes(actor.role)) {
@@ -42,7 +58,9 @@ export class PropertiesService {
       include: PROPERTY_INCLUDE,
     });
 
-    return PropertyResponseDto.from(property, { includeManagement: true });
+    await this.refreshLocationData(property.id);
+    const refreshed = await this.prisma.property.findUniqueOrThrow({ where: { id: property.id }, include: PROPERTY_INCLUDE });
+    return PropertyResponseDto.from(refreshed, { includeManagement: true });
   }
 
   async findAll(
@@ -128,12 +146,25 @@ export class PropertiesService {
     }
     await this.assertCanManage(actor, property);
 
+    const addressFields: (keyof UpdatePropertyDto)[] = ['addressLine1', 'city', 'state', 'zip'];
+    const addressChanged = addressFields.some(
+      (field) => dto[field] !== undefined && dto[field] !== property[field as keyof typeof property],
+    );
+
     const updated = await this.prisma.property.update({
       where: { id },
       data: { ...dto },
       include: PROPERTY_INCLUDE,
     });
-    return PropertyResponseDto.from(updated, { includeManagement: true });
+
+    if (addressChanged) {
+      await this.refreshLocationData(id);
+    }
+
+    const refreshed = addressChanged
+      ? await this.prisma.property.findUniqueOrThrow({ where: { id }, include: PROPERTY_INCLUDE })
+      : updated;
+    return PropertyResponseDto.from(refreshed, { includeManagement: true });
   }
 
   async assignManager(actor: AuthenticatedUser, propertyId: string, userId: string): Promise<void> {
@@ -205,6 +236,25 @@ export class PropertiesService {
     return units.map((u) => UnitResponseDto.from(u));
   }
 
+  async listNearbySchools(propertyId: string): Promise<NearbySchoolResponseDto[]> {
+    const schools = await this.prisma.nearbySchool.findMany({
+      where: { propertyId },
+      orderBy: { distanceMiles: 'asc' },
+    });
+    return schools.map((s) => NearbySchoolResponseDto.from(s));
+  }
+
+  async refreshSchools(actor: AuthenticatedUser, propertyId: string): Promise<NearbySchoolResponseDto[]> {
+    const property = await this.prisma.property.findUnique({ where: { id: propertyId }, include: PROPERTY_INCLUDE });
+    if (!property) {
+      throw new NotFoundException('Property not found');
+    }
+    await this.assertCanManage(actor, property);
+
+    await this.refreshLocationData(propertyId);
+    return this.listNearbySchools(propertyId);
+  }
+
   async joinWaitlist(actor: AuthenticatedUser, propertyId: string, note?: string): Promise<WaitlistEntryResponseDto> {
     if (!TENANT_ROLES.includes(actor.role)) {
       throw new ForbiddenException('Only prospective or current tenants can join a property waitlist');
@@ -268,20 +318,62 @@ export class PropertiesService {
       .sort((a, b) => b.managedPropertyCount - a.managedPropertyCount);
   }
 
-  async estimateRent(params: { city?: string; state?: string; bedrooms?: number }): Promise<RentEstimate> {
-    const { city, state, bedrooms } = params;
-    const units = await this.prisma.propertyUnit.findMany({
-      where: {
-        rentCents: { not: null },
-        bedrooms: bedrooms ?? undefined,
-        property: { city: city ?? undefined, state: state ?? undefined, isActive: true },
-      },
-      select: { rentCents: true },
+  /**
+   * Address-specific, not city/zip-bucketed: rent can swing significantly
+   * within under a mile (different school zone, block, amenities), so this
+   * geocodes the given address and averages rent from units on *other*
+   * active listings within a radius of those exact coordinates rather than
+   * every listing that happens to share a city or zip.
+   */
+  async estimateRent(params: {
+    addressLine1: string;
+    city: string;
+    state: string;
+    zip: string;
+    bedrooms?: number;
+  }): Promise<RentEstimate> {
+    const radiusMiles = this.configService.get('rentEstimateRadiusMiles', { infer: true }) as number;
+
+    const geocoded = await this.geocodingProvider.geocode({
+      addressLine1: params.addressLine1,
+      city: params.city,
+      state: params.state,
+      zip: params.zip,
     });
-    const rents = units.map((u) => u.rentCents).filter((r): r is number => r !== null);
+    if (!geocoded) {
+      return { estimatedMonthlyRentCents: null, sampleSize: 0, radiusMiles, bedrooms: params.bedrooms, addressResolved: false };
+    }
+
+    const box = boundingBox(geocoded.latitude, geocoded.longitude, radiusMiles);
+    const candidates = await this.prisma.property.findMany({
+      where: {
+        isActive: true,
+        latitude: { gte: box.minLat, lte: box.maxLat },
+        longitude: { gte: box.minLon, lte: box.maxLon },
+      },
+      select: {
+        latitude: true,
+        longitude: true,
+        units: {
+          where: { rentCents: { not: null }, bedrooms: params.bedrooms ?? undefined },
+          select: { rentCents: true },
+        },
+      },
+    });
+
+    const rents: number[] = [];
+    for (const candidate of candidates) {
+      if (candidate.latitude === null || candidate.longitude === null) continue;
+      const distance = haversineMiles(geocoded.latitude, geocoded.longitude, candidate.latitude, candidate.longitude);
+      if (distance > radiusMiles) continue;
+      for (const unit of candidate.units) {
+        if (unit.rentCents !== null) rents.push(unit.rentCents);
+      }
+    }
+
     const estimatedMonthlyRentCents =
       rents.length > 0 ? Math.round(rents.reduce((sum, r) => sum + r, 0) / rents.length) : null;
-    return { estimatedMonthlyRentCents, sampleSize: rents.length, city, state, bedrooms };
+    return { estimatedMonthlyRentCents, sampleSize: rents.length, radiusMiles, bedrooms: params.bedrooms, addressResolved: true };
   }
 
   private async canManage(
@@ -311,6 +403,63 @@ export class PropertiesService {
     const allowed = await this.canManage(actor, property);
     if (!allowed) {
       throw new ForbiddenException('You do not have permission to manage this property');
+    }
+  }
+
+  /**
+   * Geocodes the property's current address and refreshes its cached
+   * nearby-schools list. Best-effort and non-fatal by design: a transient
+   * geocoding/schools API hiccup should never fail the create/update call
+   * that triggered it — the property just keeps its previous (or null)
+   * location data until the next successful refresh.
+   */
+  private async refreshLocationData(propertyId: string): Promise<void> {
+    try {
+      const property = await this.prisma.property.findUnique({ where: { id: propertyId } });
+      if (!property) return;
+
+      const geocoded = await this.geocodingProvider.geocode({
+        addressLine1: property.addressLine1,
+        addressLine2: property.addressLine2,
+        city: property.city,
+        state: property.state,
+        zip: property.zip,
+      });
+      if (!geocoded) {
+        this.logger.warn(`Could not geocode property ${propertyId} — leaving location data unchanged`);
+        return;
+      }
+
+      await this.prisma.property.update({
+        where: { id: propertyId },
+        data: { latitude: geocoded.latitude, longitude: geocoded.longitude },
+      });
+
+      const schools = await this.schoolsProvider.findNearby({
+        latitude: geocoded.latitude,
+        longitude: geocoded.longitude,
+        limit: 10,
+      });
+
+      await this.prisma.$transaction([
+        this.prisma.nearbySchool.deleteMany({ where: { propertyId } }),
+        this.prisma.nearbySchool.createMany({
+          data: schools.map((s) => ({
+            propertyId,
+            externalId: s.externalId,
+            name: s.name,
+            schoolType: s.schoolType,
+            level: s.level,
+            rating: s.rating,
+            distanceMiles: s.distanceMiles,
+            address: s.address,
+            websiteUrl: s.websiteUrl,
+          })),
+        }),
+        this.prisma.property.update({ where: { id: propertyId }, data: { schoolsFetchedAt: new Date() } }),
+      ]);
+    } catch (err) {
+      this.logger.error(`Failed to refresh location data for property ${propertyId}`, err instanceof Error ? err.stack : err);
     }
   }
 }
