@@ -97,6 +97,7 @@ export class PropertyResponseDto {
   tenantSwapAllowed!: boolean;
   landlordDisplayName!: string;
   units!: UnitResponseDto[];
+  viewCount!: number;
   createdAt!: Date;
   updatedAt!: Date;
 
@@ -137,6 +138,7 @@ export class PropertyResponseDto {
       sellerFinancingAvailable: boolean;
       workForRentAvailable: boolean;
       tenantSwapAllowed: boolean;
+      viewCount: number;
       createdAt: Date;
       updatedAt: Date;
       ownerId: string;
@@ -190,6 +192,7 @@ export class PropertyResponseDto {
     dto.tenantSwapAllowed = property.tenantSwapAllowed;
     dto.landlordDisplayName = property.owner?.profile?.displayName ?? 'Property Management';
     dto.units = (property.units ?? []).map((u) => UnitResponseDto.from(u));
+    dto.viewCount = property.viewCount;
     dto.createdAt = property.createdAt;
     dto.updatedAt = property.updatedAt;
 

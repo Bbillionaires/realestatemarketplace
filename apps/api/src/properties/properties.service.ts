@@ -368,6 +368,38 @@ export class PropertiesService {
   }
 
   /**
+   * Weighted-random sample for the public home page feed: every active
+   * property gets a chance, but one with more flips-to-details is more
+   * likely to be picked. Uses weighted random sampling without replacement
+   * (Efraimidis-Spirakis: each candidate draws key = U^(1/weight) for
+   * U ~ Uniform(0,1), and the largest keys win) rather than a straight
+   * "top N by viewCount" — a straight ranking would freeze the same
+   * handful of properties on the feed forever once they got an early lead.
+   */
+  async getFeed(take: number): Promise<PropertyResponseDto[]> {
+    const candidates = await this.prisma.property.findMany({
+      where: { isActive: true },
+      include: PROPERTY_INCLUDE,
+    });
+
+    const keyed = candidates.map((property) => ({
+      property,
+      key: Math.random() ** (1 / (property.viewCount + 1)),
+    }));
+    keyed.sort((a, b) => b.key - a.key);
+
+    return keyed.slice(0, take).map(({ property }) => PropertyResponseDto.from(property, { includeManagement: false }));
+  }
+
+  /** Fires when a logged-out (or logged-in) visitor flips a home-feed card to its details side. */
+  async recordView(propertyId: string): Promise<void> {
+    await this.prisma.property.updateMany({
+      where: { id: propertyId, isActive: true },
+      data: { viewCount: { increment: 1 } },
+    });
+  }
+
+  /**
    * Address-specific, not city/zip-bucketed: rent can swing significantly
    * within under a mile (different school zone, block, amenities), so this
    * geocodes the given address and averages rent from units on *other*

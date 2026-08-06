@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditLog } from '../common/decorators/audit-log.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { PropertiesService } from './properties.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
@@ -48,6 +49,17 @@ export class PropertiesController {
     return this.propertiesService.listAgencies();
   }
 
+  // Public — the home page's flip-card feed is a logged-out visitor's first
+  // look at the platform, so it can't require a JWT the way every other
+  // /properties route does.
+  @Get('feed')
+  @Public()
+  getFeed(@Query('take') take?: string) {
+    const parsed = take ? parseInt(take, 10) : 12;
+    const bounded = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 50) : 12;
+    return this.propertiesService.getFeed(bounded);
+  }
+
   @Get('rent-estimate')
   rentEstimate(@Query() query: RentEstimateQueryDto) {
     return this.propertiesService.estimateRent(query);
@@ -67,6 +79,15 @@ export class PropertiesController {
   @AuditLog('property.update', 'Property')
   update(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdatePropertyDto) {
     return this.propertiesService.update(user, id, dto);
+  }
+
+  // Public, same reasoning as GET /feed — this fires when a logged-out
+  // visitor flips a feed card, well before any login.
+  @Post(':id/view')
+  @Public()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  recordView(@Param('id') id: string) {
+    return this.propertiesService.recordView(id);
   }
 
   @Post(':id/managers')

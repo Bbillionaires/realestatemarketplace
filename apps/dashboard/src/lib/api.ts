@@ -110,6 +110,7 @@ export interface PropertySummary {
   sellerFinancingAvailable: boolean;
   workForRentAvailable: boolean;
   tenantSwapAllowed: boolean;
+  viewCount: number;
   ownerId?: string;
   managerIds?: string[];
 }
@@ -500,6 +501,10 @@ export const api = {
     return request<PropertySummary[]>(`/properties${qs ? `?${qs}` : ''}`, {}, accessToken);
   },
   getProperty: (accessToken: string, id: string) => request<PropertySummary>(`/properties/${id}`, {}, accessToken),
+  // Public — no accessToken needed. The home page feed and its view-count
+  // ping are a logged-out visitor's first touch with the platform.
+  getPropertyFeed: (take = 12) => request<PropertySummary[]>(`/properties/feed?take=${take}`),
+  recordPropertyView: (id: string) => request<void>(`/properties/${id}/view`, { method: 'POST' }),
   createProperty: (accessToken: string, payload: CreatePropertyPayload) =>
     request<PropertySummary>('/properties', { method: 'POST', body: JSON.stringify(payload) }, accessToken),
   updateProperty: (accessToken: string, id: string, payload: UpdatePropertyPayload) =>

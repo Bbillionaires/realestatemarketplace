@@ -50,7 +50,14 @@ apps/
                          (ENTIRE_PLACE/PRIVATE_ROOM/SHARED_ROOM) lets a landlord list individual rooms
                          instead of always renting the whole property as one; a SHARED_ROOM unit's actual
                          rentable sub-listings are its Beds — each with its own rent and availability,
-                         nested one CRUD level under `/properties/:id/units/:unitId/beds`
+                         nested one CRUD level under `/properties/:id/units/:unitId/beds`. Two routes are
+                         `@Public()` (no JWT) rather than the RBAC every other property route requires:
+                         `GET /properties/feed` and `POST /properties/:id/view`, the pair backing the
+                         logged-out home page's flip-card feed. The feed samples active properties by
+                         weighted random selection (Efraimidis-Spirakis: every property gets a nonzero
+                         chance, but one with more `viewCount` — incremented once per flip-to-details —
+                         is proportionally more likely to be drawn) rather than a fixed "top viewed"
+                         ranking, so a few early leaders don't freeze out everything else forever
       conversations/     Tenant-starts-conversation flow, relay assignment, RBAC. Optionally scoped to a
                          specific unit and/or bed (a bedId implies its parent unit, so the caller doesn't
                          have to resolve and send both)
@@ -94,6 +101,9 @@ apps/
       config/            Env loading + validation
     test/                e2e tests (supertest against a real Nest app + test DB)
   dashboard/             Next.js dashboard
+    src/app/page.tsx              Home page: a logged-out flip-card feed (public GET /properties/feed).
+                                   Clicking a card's image face does a single CSS 3D rotateY flip to its
+                                   details face and fires the public view-count ping once per card
     src/app/properties/          Browse + detail pages (photo, tabs, sticky "Message Landlord" bar).
                                   The detail page's "Available rooms" section shows every individually-
                                   priced room/bed to tenants (only rendered when a property actually uses
@@ -325,6 +335,15 @@ bed — the parent unit is filled in automatically from the bed so the caller do
 send both — and a bedId that disagrees with an explicitly-given unitId, or belongs to a different
 property entirely, is rejected (400).
 
+**Home feed** (`test/home-feed.e2e-spec.ts`) — both `GET /properties/feed` and `POST /properties/:id/view`
+work with no `Authorization` header at all, unlike every other `/properties` route; an inactive property
+never appears in the feed and its view count never increments even if you hit the endpoint directly, and
+viewing an id that doesn't exist is a silent no-op (204) rather than a 404 — a logged-out visitor's stray
+click is never an error state. `take` is bounded to [1, 50] and defaults to 12. A statistical test gives
+one property 100 views against another's 0 and samples the feed 20 times: the popular one wins the large
+majority of draws, proving the weighting actually favors it, without the test asserting exact ranking
+(which would defeat the point of it still being a *random* feed).
+
 ## API surface
 
 All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webhooks/*` requires
@@ -344,6 +363,8 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | GET/POST | `/phone` | List / start OTP verification |
 | POST | `/phone/confirm-verification` | |
 | GET/POST | `/properties`, `/properties/:id` | Role-shaped response (see above) |
+| GET | `/properties/feed` | **Public, no JWT** — weighted-random sample of active properties for the logged-out home page; `take` bounded to [1, 50], defaults to 12 |
+| POST | `/properties/:id/view` | **Public, no JWT** — increments the property's view count (the feed's popularity weighting); no-ops silently on an unknown or inactive property |
 | PATCH | `/properties/:id` | Owner, assigned manager, or staff/admin |
 | POST/PATCH | `/properties/:id/managers`, `/managers/:userId/revoke` | |
 | GET/POST/PATCH | `/properties/:id/units`, `/units/:unitId` | `listingType` (ENTIRE_PLACE/PRIVATE_ROOM/SHARED_ROOM) defaults to ENTIRE_PLACE |

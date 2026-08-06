@@ -495,6 +495,12 @@ model Property {
   workForRentAvailable      Boolean @default(false)
   tenantSwapAllowed         Boolean @default(false)
 
+  // Incremented once per flip-to-details on the public home feed (see
+  // PropertiesService.recordView) — the popularity signal the feed's
+  // weighted-random sampling favors. Not a page-view counter; a property
+  // never seen on the feed simply stays at 0.
+  viewCount        Int      @default(0)
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
