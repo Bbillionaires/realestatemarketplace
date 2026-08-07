@@ -39,9 +39,13 @@ describe('corsOriginValidator', () => {
     });
   });
 
-  it('rejects an origin not in the list', (done) => {
-    validate('https://evil.example.com', (err) => {
-      expect(err).not.toBeNull();
+  it('rejects an origin not in the list without throwing (no CORS headers, not an error)', (done) => {
+    validate('https://evil.example.com', (err, allow) => {
+      // Must be callback(null, false) — never callback(new Error(...)), which
+      // propagates as an unhandled exception (a 500) with no filter to catch
+      // it, rather than an ordinary same-origin-policy rejection.
+      expect(err).toBeNull();
+      expect(allow).toBe(false);
       done();
     });
   });
