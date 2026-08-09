@@ -158,7 +158,7 @@ async function main() {
       monthlyRentCents: 145000,
       depositCents: 145000,
       petPolicy: 'No pets allowed.',
-      photoUrl: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&q=80',
+      photoUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800&q=80',
       units: {
         create: [{ unitLabel: 'Apt 2B', bedrooms: 2, bathrooms: 1, squareFeet: 900, rentCents: 145000 }],
       },
