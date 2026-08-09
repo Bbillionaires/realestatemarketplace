@@ -38,7 +38,12 @@ apps/
   api/                  NestJS backend
     prisma/
       schema.prisma     Full data model (all phases)
-      migrations/
+      migrations/        Includes one data-only migration (`..._backfill_property_photo_urls`) that
+                         assigns a real, hand-curated house/apartment exterior photo (hotlinked from
+                         Unsplash) to every pre-existing property that has no `photoUrl` — otherwise the
+                         home page's flip-card feed falls back to a generic placeholder icon for them.
+                         Runs automatically via `prisma migrate deploy` on every deploy; a property
+                         created after this migration ran is untouched by it.
       seed.ts
     src/
       auth/             Register, login, refresh rotation

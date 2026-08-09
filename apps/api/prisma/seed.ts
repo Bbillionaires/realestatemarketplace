@@ -133,6 +133,7 @@ async function main() {
       monthlyRentCents: 185000,
       depositCents: 185000,
       petPolicy: 'Cats and small dogs welcome with pet deposit.',
+      photoUrl: 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80',
       units: {
         create: [{ unitLabel: 'Main', bedrooms: 3, bathrooms: 2, squareFeet: 1450, rentCents: 185000 }],
       },
@@ -157,6 +158,7 @@ async function main() {
       monthlyRentCents: 145000,
       depositCents: 145000,
       petPolicy: 'No pets allowed.',
+      photoUrl: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&q=80',
       units: {
         create: [{ unitLabel: 'Apt 2B', bedrooms: 2, bathrooms: 1, squareFeet: 900, rentCents: 145000 }],
       },
