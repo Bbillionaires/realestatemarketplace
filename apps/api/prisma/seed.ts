@@ -133,7 +133,7 @@ async function main() {
       monthlyRentCents: 185000,
       depositCents: 185000,
       petPolicy: 'Cats and small dogs welcome with pet deposit.',
-      photoUrl: 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80',
+      photoUrl: 'https://images.unsplash.com/photo-1652469281665-0ea785b9f743?w=800&q=80',
       units: {
         create: [{ unitLabel: 'Main', bedrooms: 3, bathrooms: 2, squareFeet: 1450, rentCents: 185000 }],
       },
