@@ -3,23 +3,29 @@ import { ConfigService } from '@nestjs/config';
 import { AppConfig } from '../config/configuration';
 import { EMAIL_PROVIDER } from './email.constants';
 import { MockEmailProvider } from './providers/mock-email.provider';
+import { ResendEmailProvider } from './providers/resend-email.provider';
 
 /**
  * Binds the EMAIL_PROVIDER token to a concrete EmailProvider implementation
- * based on EMAIL_PROVIDER env var. Only "mock" is wired up for now — a
- * "resend" case gets added to the switch below (using AppConfig.resend)
- * once a Resend API key is available, with no caller needing to change.
+ * based on the EMAIL_PROVIDER env var.
  */
 @Global()
 @Module({
   providers: [
     MockEmailProvider,
+    ResendEmailProvider,
     {
       provide: EMAIL_PROVIDER,
-      inject: [ConfigService, MockEmailProvider],
-      useFactory: (configService: ConfigService<AppConfig>, mock: MockEmailProvider) => {
+      inject: [ConfigService, MockEmailProvider, ResendEmailProvider],
+      useFactory: (
+        configService: ConfigService<AppConfig>,
+        mock: MockEmailProvider,
+        resend: ResendEmailProvider,
+      ) => {
         const provider = configService.get('emailProvider', { infer: true });
         switch (provider) {
+          case 'resend':
+            return resend;
           case 'mock':
           default:
             return mock;
