@@ -208,6 +208,16 @@ export interface RentEstimate {
   addressResolved: boolean;
 }
 
+export interface VoucherMatch {
+  zip: string;
+  bedrooms: number;
+  paymentStandardCents: number | null;
+  metroArea: string | null;
+  effectiveDate: string | null;
+  covered: boolean;
+  matches: PropertySummary[];
+}
+
 export interface WaitlistEntry {
   id: string;
   propertyId: string;
@@ -555,6 +565,10 @@ export const api = {
     if (params.bedrooms !== undefined) qs.set('bedrooms', String(params.bedrooms));
     return request<RentEstimate>(`/properties/rent-estimate?${qs.toString()}`, {}, accessToken);
   },
+  // Public — no accessToken needed, same reasoning as getPropertyFeed: a
+  // voucher holder racing an expiration deadline shouldn't need an account.
+  getVoucherMatches: (zip: string, bedrooms: number) =>
+    request<VoucherMatch>(`/properties/voucher-matcher?zip=${encodeURIComponent(zip)}&bedrooms=${bedrooms}`),
   joinWaitlist: (accessToken: string, propertyId: string, note?: string) =>
     request<WaitlistEntry>(
       `/properties/${propertyId}/waitlist`,

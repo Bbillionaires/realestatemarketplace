@@ -60,9 +60,19 @@ apps/
                          unit is PRIVATE_ROOM/SHARED_ROOM, not stored) are filterable via `GET /properties`
                          (`?secondChance=true`, `?roomRentals=true`) the same way `?section8=true` already
                          is, and surface as badges (`PropertyCard`) and dedicated browse pages
-                         (`/second-chance`, `/rooms`) alongside the existing `/section8` page. Two routes are
+                         (`/second-chance`, `/rooms`) alongside the existing `/section8` page. The `PaymentStandard`
+                         table holds HUD's published FY2026 Small Area Fair Market Rents — one figure per (zip,
+                         bedroom count) rather than one per metro area, since Duval County is a Small Area FMR
+                         county — seeded for its 20 SAFMR zip codes (`prisma/payment-standards.data.ts`, shared
+                         between `seed.ts` and the `add_payment_standards` migration's data-load). `GET
+                         /properties/voucher-matcher?zip=&bedrooms=` (also `@Public()`) is the "Voucher Value
+                         Matcher": looks up that zip/bedroom's payment standard and returns every active,
+                         Section-8-accepting listing in that zip priced at or below it — by rent alone, not by
+                         the unit's own bedroom count, since a voucher's payment standard is set by the
+                         *voucher's* bedroom allowance rather than the unit being rented. Three routes are
                          `@Public()` (no JWT) rather than the RBAC every other property route requires:
-                         `GET /properties/feed` and `POST /properties/:id/view`, the pair backing the
+                         `GET /properties/feed`, `POST /properties/:id/view`, and `GET
+                         /properties/voucher-matcher` — the first pair backing the
                          logged-out home page's flip-card feed. The feed samples active properties by
                          weighted random selection (Efraimidis-Spirakis: every property gets a nonzero
                          chance, but one with more `viewCount` — incremented once per flip-to-details —
@@ -372,8 +382,9 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | PATCH | `/users/:id/suspend-permission` | Admin+ only — grants/revokes a specific moderator's `canSuspendUsers` |
 | GET/POST | `/phone` | List / start OTP verification |
 | POST | `/phone/confirm-verification` | |
-| GET/POST | `/properties`, `/properties/:id` | Role-shaped response (see above) |
+| GET/POST | `/properties`, `/properties/:id` | Role-shaped response (see above). List accepts `?section8=true`, `?secondChance=true`, `?roomRentals=true` filters |
 | GET | `/properties/feed` | **Public, no JWT** — weighted-random sample of active properties for the logged-out home page; `take` bounded to [1, 50], defaults to 12 |
+| GET | `/properties/voucher-matcher` | **Public, no JWT** — "Voucher Value Matcher": `?zip=&bedrooms=` looks up the HUD payment standard for that zip/bedroom count (`PaymentStandard` table, Duval County's 20 SAFMR zips) and returns every active, Section-8-accepting listing in that zip priced at or below it |
 | POST | `/properties/:id/view` | **Public, no JWT** — increments the property's view count (the feed's popularity weighting); no-ops silently on an unknown or inactive property |
 | PATCH | `/properties/:id` | Owner, assigned manager, or staff/admin |
 | POST/PATCH | `/properties/:id/managers`, `/managers/:userId/revoke` | |

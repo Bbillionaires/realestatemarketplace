@@ -13,6 +13,7 @@ import { UpdateBedDto } from './dto/update-bed.dto';
 import { AssignManagerDto } from './dto/assign-manager.dto';
 import { JoinWaitlistDto } from './dto/join-waitlist.dto';
 import { RentEstimateQueryDto } from './dto/rent-estimate-query.dto';
+import { VoucherMatcherQueryDto } from './dto/voucher-matcher-query.dto';
 
 @Controller('properties')
 export class PropertiesController {
@@ -67,6 +68,16 @@ export class PropertiesController {
   @Get('rent-estimate')
   rentEstimate(@Query() query: RentEstimateQueryDto) {
     return this.propertiesService.estimateRent(query);
+  }
+
+  // Public, like the home feed — a voucher holder racing a 60-90 day
+  // expiration clock shouldn't need an account just to check what's
+  // affordable, per the "never paywall search from low-income renters" rule
+  // every other public-search route here already follows.
+  @Get('voucher-matcher')
+  @Public()
+  voucherMatcher(@Query() query: VoucherMatcherQueryDto) {
+    return this.propertiesService.matchVoucherProperties(query.zip, query.bedrooms);
   }
 
   @Get('waitlists/me')

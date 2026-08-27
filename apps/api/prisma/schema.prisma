@@ -601,6 +601,29 @@ model PropertyWaitlistEntry {
   @@index([propertyId])
 }
 
+// A published HUD Small Area Fair Market Rent (the basis for a housing
+// authority's voucher "payment standard") for one zip code and bedroom
+// count. Duval County, FL is a Small Area FMR county, so — unlike most of
+// the country, where one FMR covers an entire metro area — HUD publishes a
+// distinct figure per zip code here. `bedrooms` is 0 (studio) through 4,
+// where 4 stands for "4 or more" (HUD's own FMR tables stop at 4). Seeded
+// from HUD's FY2026 published SAFMR table (effective 2025-10-01) for the 20
+// zip codes HUD designates as Duval County's Small Area FMR zips; a zip
+// code not present here simply isn't covered yet, not "zero rent."
+model PaymentStandard {
+  id                String   @id @default(uuid())
+  zip               String
+  bedrooms          Int
+  monthlyRentCents  Int
+  metroArea         String   @default("Jacksonville, FL HUD Metro FMR Area")
+  effectiveDate     DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([zip, bedrooms])
+  @@index([zip])
+}
+
 // Cached result of a SchoolsProvider.findNearby() lookup for a property's
 // geocoded coordinates. Cached (rather than fetched live on every listing
 // view) since the upstream schools API is metered per call and school

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { PrismaClient, Role, ConsentStatus } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { createHmac, createCipheriv, randomBytes } from 'crypto';
+import { PAYMENT_STANDARDS, PAYMENT_STANDARDS_EFFECTIVE_DATE } from './payment-standards.data';
 
 const prisma = new PrismaClient();
 
@@ -172,6 +173,17 @@ async function main() {
       update: {},
       create: { phoneNumber, provider: 'mock', region: 'US', capacityLimit: 50 },
     });
+  }
+
+  const effectiveDate = new Date(PAYMENT_STANDARDS_EFFECTIVE_DATE);
+  for (const { zip, rents } of PAYMENT_STANDARDS) {
+    for (let bedrooms = 0; bedrooms < rents.length; bedrooms++) {
+      await prisma.paymentStandard.upsert({
+        where: { zip_bedrooms: { zip, bedrooms } },
+        update: { monthlyRentCents: rents[bedrooms] * 100, effectiveDate },
+        create: { zip, bedrooms, monthlyRentCents: rents[bedrooms] * 100, effectiveDate },
+      });
+    }
   }
 
   console.log('Seed complete:', {

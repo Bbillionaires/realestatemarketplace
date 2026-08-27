@@ -32,6 +32,17 @@ export interface RentEstimate {
   addressResolved: boolean;
 }
 
+export interface VoucherMatcherResult {
+  zip: string;
+  bedrooms: number;
+  paymentStandardCents: number | null;
+  metroArea: string | null;
+  effectiveDate: Date | null;
+  /** False when this zip/bedroom combo has no published payment standard yet — distinct from "covered, but $0 matches". */
+  covered: boolean;
+  matches: PropertyResponseDto[];
+}
+
 const STAFF_ROLES: Role[] = [Role.STAFF_MODERATOR, Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR];
 const PROPERTY_INCLUDE = {
   owner: { include: { profile: true } },
@@ -461,6 +472,48 @@ export class PropertiesService {
     const estimatedMonthlyRentCents =
       rents.length > 0 ? Math.round(rents.reduce((sum, r) => sum + r, 0) / rents.length) : null;
     return { estimatedMonthlyRentCents, sampleSize: rents.length, radiusMiles, bedrooms: params.bedrooms, addressResolved: true };
+  }
+
+  /**
+   * "Voucher Value Matcher": given a bedroom allowance and zip code, looks
+   * up the published HUD payment standard for that combo and returns every
+   * active, Section-8-accepting listing in that zip priced at or below it —
+   * exactly what a voucher holder can actually afford and use their voucher
+   * on, not a market-rate comp average like estimateRent() above. Matching
+   * is by rent alone, not by the unit's own bedroom count: a voucher's
+   * payment standard is set by the *voucher's* bedroom allowance, so a
+   * holder can rent any unit at or under that standard, per actual HUD
+   * rules — filtering out cheaper units with fewer bedrooms would be wrong.
+   */
+  async matchVoucherProperties(zip: string, bedrooms: number): Promise<VoucherMatcherResult> {
+    const standard = await this.prisma.paymentStandard.findUnique({ where: { zip_bedrooms: { zip, bedrooms } } });
+
+    if (!standard) {
+      return { zip, bedrooms, paymentStandardCents: null, metroArea: null, effectiveDate: null, covered: false, matches: [] };
+    }
+
+    const candidates = await this.prisma.property.findMany({
+      where: { isActive: true, zip, acceptsSection8Vouchers: true },
+      include: PROPERTY_INCLUDE,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const matches = candidates
+      .map((p) => PropertyResponseDto.from(p, { includeManagement: false }))
+      .filter((p) => {
+        const rentCents = p.units[0]?.rentCents ?? p.monthlyRentCents;
+        return rentCents !== null && rentCents <= standard.monthlyRentCents;
+      });
+
+    return {
+      zip,
+      bedrooms,
+      paymentStandardCents: standard.monthlyRentCents,
+      metroArea: standard.metroArea,
+      effectiveDate: standard.effectiveDate,
+      covered: true,
+      matches,
+    };
   }
 
   private async canManage(
