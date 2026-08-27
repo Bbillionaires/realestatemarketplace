@@ -22,6 +22,8 @@ const RENTER_LINKS: NavLink[] = [
   { href: '/properties?type=APARTMENT', label: 'Apartments for rent' },
   { href: '/properties?type=HOUSE', label: 'Houses for rent' },
   { href: '/section8', label: 'Section 8 Housing' },
+  { href: '/second-chance', label: 'Second-Chance Friendly' },
+  { href: '/rooms', label: 'Room & Co-Living Rentals' },
   { href: '/waitlists', label: 'Waiting Lists' },
 ];
 

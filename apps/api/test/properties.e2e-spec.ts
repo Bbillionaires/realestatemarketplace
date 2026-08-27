@@ -167,6 +167,7 @@ describe('Properties (e2e)', () => {
       sellerFinancingAvailable: false,
       workForRentAvailable: false,
       tenantSwapAllowed: false,
+      secondChanceFriendly: false,
     });
   });
 
@@ -186,6 +187,7 @@ describe('Properties (e2e)', () => {
         sellerFinancingAvailable: true,
         workForRentAvailable: true,
         tenantSwapAllowed: true,
+        secondChanceFriendly: true,
       });
     expect(created.status).toBe(201);
     expect(created.body).toMatchObject({
@@ -196,6 +198,7 @@ describe('Properties (e2e)', () => {
       sellerFinancingAvailable: true,
       workForRentAvailable: true,
       tenantSwapAllowed: true,
+      secondChanceFriendly: true,
     });
 
     const asTenant = await request(app.getHttpServer())
@@ -222,19 +225,21 @@ describe('Properties (e2e)', () => {
     const updated = await request(app.getHttpServer())
       .patch(`/api/properties/${propertyId}`)
       .set('Authorization', `Bearer ${landlordToken}`)
-      .send({ workForRentAvailable: true, tenantSwapAllowed: true });
+      .send({ workForRentAvailable: true, tenantSwapAllowed: true, secondChanceFriendly: true });
     expect(updated.status).toBe(200);
     expect(updated.body.workForRentAvailable).toBe(true);
     expect(updated.body.tenantSwapAllowed).toBe(true);
+    expect(updated.body.secondChanceFriendly).toBe(true);
     expect(updated.body.rentToOwnAvailable).toBe(false);
 
     const reverted = await request(app.getHttpServer())
       .patch(`/api/properties/${propertyId}`)
       .set('Authorization', `Bearer ${landlordToken}`)
-      .send({ workForRentAvailable: false, tenantSwapAllowed: false });
+      .send({ workForRentAvailable: false, tenantSwapAllowed: false, secondChanceFriendly: false });
     expect(reverted.status).toBe(200);
     expect(reverted.body.workForRentAvailable).toBe(false);
     expect(reverted.body.tenantSwapAllowed).toBe(false);
+    expect(reverted.body.secondChanceFriendly).toBe(false);
   });
 
   it('rejects non-boolean values for the new listing-option flags', async () => {

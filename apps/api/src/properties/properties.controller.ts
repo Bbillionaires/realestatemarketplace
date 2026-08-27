@@ -31,6 +31,8 @@ export class PropertiesController {
     @Query('state') state?: string,
     @Query('type') propertyType?: string,
     @Query('section8') section8?: string,
+    @Query('secondChance') secondChance?: string,
+    @Query('roomRentals') roomRentals?: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
   ) {
@@ -39,6 +41,8 @@ export class PropertiesController {
       state,
       propertyType,
       acceptsSection8Vouchers: section8 === 'true' ? true : undefined,
+      secondChanceFriendly: secondChance === 'true' ? true : undefined,
+      roomRentals: roomRentals === 'true' ? true : undefined,
       skip: skip ? parseInt(skip, 10) : undefined,
       take: take ? parseInt(take, 10) : undefined,
     });

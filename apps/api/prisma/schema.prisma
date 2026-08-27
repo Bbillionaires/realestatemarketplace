@@ -495,6 +495,13 @@ model Property {
   workForRentAvailable      Boolean @default(false)
   tenantSwapAllowed         Boolean @default(false)
 
+  // Landlord signals openness to applicants with a prior eviction, credit
+  // issue, or justice-involvement — surfaced as a search filter/badge
+  // ("Second-Chance Friendly") alongside acceptsSection8Vouchers. Kept as a
+  // plain yes/no flag rather than free text, since screening criteria (not
+  // demographic language) is what stays fair-housing-safe.
+  secondChanceFriendly      Boolean @default(false)
+
   // Incremented once per flip-to-details on the public home feed (see
   // PropertiesService.recordView) — the popularity signal the feed's
   // weighted-random sampling favors. Not a page-view counter; a property

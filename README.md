@@ -55,7 +55,12 @@ apps/
                          (ENTIRE_PLACE/PRIVATE_ROOM/SHARED_ROOM) lets a landlord list individual rooms
                          instead of always renting the whole property as one; a SHARED_ROOM unit's actual
                          rentable sub-listings are its Beds — each with its own rent and availability,
-                         nested one CRUD level under `/properties/:id/units/:unitId/beds`. Two routes are
+                         nested one CRUD level under `/properties/:id/units/:unitId/beds`. A landlord-set
+                         `secondChanceFriendly` flag and a `hasRoomRentals` flag (derived from whether any
+                         unit is PRIVATE_ROOM/SHARED_ROOM, not stored) are filterable via `GET /properties`
+                         (`?secondChance=true`, `?roomRentals=true`) the same way `?section8=true` already
+                         is, and surface as badges (`PropertyCard`) and dedicated browse pages
+                         (`/second-chance`, `/rooms`) alongside the existing `/section8` page. Two routes are
                          `@Public()` (no JWT) rather than the RBAC every other property route requires:
                          `GET /properties/feed` and `POST /properties/:id/view`, the pair backing the
                          logged-out home page's flip-card feed. The feed samples active properties by

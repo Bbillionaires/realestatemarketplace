@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PropertyType, Role } from '@prisma/client';
+import { PropertyType, Role, UnitListingType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { AppConfig } from '../config/configuration';
@@ -72,17 +72,23 @@ export class PropertiesService {
       state?: string;
       propertyType?: string;
       acceptsSection8Vouchers?: boolean;
+      secondChanceFriendly?: boolean;
+      roomRentals?: boolean;
       skip?: number;
       take?: number;
     },
   ): Promise<PropertyResponseDto[]> {
-    const { city, state, propertyType, acceptsSection8Vouchers, skip = 0, take = 50 } = filters;
+    const { city, state, propertyType, acceptsSection8Vouchers, secondChanceFriendly, roomRentals, skip = 0, take = 50 } = filters;
     const typeFilter = propertyType && PROPERTY_TYPE_VALUES.includes(propertyType) ? (propertyType as PropertyType) : undefined;
     const commonFilters = {
       city: city ?? undefined,
       state: state ?? undefined,
       propertyType: typeFilter,
       acceptsSection8Vouchers: acceptsSection8Vouchers === true ? true : undefined,
+      secondChanceFriendly: secondChanceFriendly === true ? true : undefined,
+      // A property "has room rentals" when at least one of its units is
+      // rented room-by-room rather than as the entire place.
+      units: roomRentals === true ? { some: { listingType: { in: ['PRIVATE_ROOM', 'SHARED_ROOM'] as UnitListingType[] } } } : undefined,
     };
 
     if (!actor || actor.role === Role.PROSPECTIVE_TENANT || actor.role === Role.CURRENT_TENANT) {

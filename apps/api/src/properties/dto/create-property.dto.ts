@@ -131,4 +131,9 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsBoolean()
   tenantSwapAllowed?: boolean;
+
+  /** Landlord is open to applicants with a prior eviction, credit issue, or justice-involvement. */
+  @IsOptional()
+  @IsBoolean()
+  secondChanceFriendly?: boolean;
 }

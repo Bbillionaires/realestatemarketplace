@@ -52,6 +52,7 @@ export default function NewPropertyPage() {
   const [petPolicy, setPetPolicy] = useState('');
   const [propertyType, setPropertyType] = useState<PropertyType>('APARTMENT');
   const [acceptsSection8Vouchers, setAcceptsSection8Vouchers] = useState(false);
+  const [secondChanceFriendly, setSecondChanceFriendly] = useState(false);
   const [bedrooms, setBedrooms] = useState('');
   const [bathrooms, setBathrooms] = useState('');
   const [squareFeet, setSquareFeet] = useState('');
@@ -104,6 +105,7 @@ export default function NewPropertyPage() {
         petPolicy: petPolicy || undefined,
         propertyType,
         acceptsSection8Vouchers,
+        secondChanceFriendly,
         amenities: amenities || undefined,
         utilitiesIncluded: utilitiesIncluded.length > 0 ? utilitiesIncluded : undefined,
         sewerSource: sewerSource || undefined,
@@ -383,6 +385,14 @@ export default function NewPropertyPage() {
               onChange={(e) => setAcceptsSection8Vouchers(e.target.checked)}
             />
             This property accepts Section 8 housing vouchers
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={secondChanceFriendly}
+              onChange={(e) => setSecondChanceFriendly(e.target.checked)}
+            />
+            Open to second-chance applicants (prior eviction, credit issue, or justice-involvement)
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
             <input

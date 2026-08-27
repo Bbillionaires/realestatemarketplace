@@ -28,6 +28,11 @@ const TENANT_ROLES = ['PROSPECTIVE_TENANT', 'CURRENT_TENANT'];
 
 const LISTING_OPTIONS: { flag: keyof UpdatePropertyPayload; label: string; hint: string }[] = [
   { flag: 'acceptsSection8Vouchers', label: 'Accepts Section 8 Vouchers', hint: 'Housing Choice Voucher tenants are welcome to apply.' },
+  {
+    flag: 'secondChanceFriendly',
+    label: 'Second-Chance Friendly',
+    hint: 'Open to applicants with a prior eviction, credit issue, or justice-involvement.',
+  },
   { flag: 'rentToOwnAvailable', label: 'Rent-to-Own', hint: 'Tenant may apply rent toward eventual purchase.' },
   { flag: 'leaseToOwnAvailable', label: 'Lease-to-Own', hint: 'Lease includes an option to buy at term end.' },
   { flag: 'sellerFinancingAvailable', label: 'Seller Financing', hint: 'You would finance the purchase directly for a buyer.' },
@@ -217,6 +222,7 @@ export default function PropertyDetailPage() {
       sellerFinancingAvailable: property.sellerFinancingAvailable,
       workForRentAvailable: property.workForRentAvailable,
       tenantSwapAllowed: property.tenantSwapAllowed,
+      secondChanceFriendly: property.secondChanceFriendly,
     });
     setEditError(null);
     setEditOpen(true);
@@ -509,6 +515,8 @@ export default function PropertyDetailPage() {
                     </dd>
                     <dt style={{ color: theme.textMuted }}>Section 8 Vouchers</dt>
                     <dd style={{ margin: 0 }}>{property.acceptsSection8Vouchers ? 'Accepted' : 'Not accepted'}</dd>
+                    <dt style={{ color: theme.textMuted }}>Second-Chance Friendly</dt>
+                    <dd style={{ margin: 0 }}>{property.secondChanceFriendly ? 'Yes' : 'No'}</dd>
                     <dt style={{ color: theme.textMuted }}>Rent-to-Own</dt>
                     <dd style={{ margin: 0 }}>{property.rentToOwnAvailable ? 'Available' : 'Not offered'}</dd>
                     <dt style={{ color: theme.textMuted }}>Lease-to-Own</dt>

@@ -106,6 +106,111 @@ describe('Property extras: type/Section8 filters, agencies, rent estimate, waitl
     });
   });
 
+  describe('Second-chance and room-rental filters', () => {
+    it('defaults secondChanceFriendly to false and hasRoomRentals to false', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-second-chance-default@example.com');
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send(basePayload);
+      expect(created.status).toBe(201);
+      expect(created.body.secondChanceFriendly).toBe(false);
+      expect(created.body.hasRoomRentals).toBe(false);
+    });
+
+    it('persists an explicit secondChanceFriendly on create and exposes it to prospective tenants', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-second-chance-set@example.com');
+      const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-second-chance-set@example.com');
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ ...basePayload, secondChanceFriendly: true });
+      expect(created.status).toBe(201);
+      expect(created.body.secondChanceFriendly).toBe(true);
+
+      const asTenant = await request(app.getHttpServer())
+        .get(`/api/properties/${created.body.id}`)
+        .set('Authorization', `Bearer ${tenantToken}`);
+      expect(asTenant.status).toBe(200);
+      expect(asTenant.body.secondChanceFriendly).toBe(true);
+    });
+
+    it('derives hasRoomRentals from whether any unit is PRIVATE_ROOM/SHARED_ROOM rather than ENTIRE_PLACE', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-room-rentals@example.com');
+      const created = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send(basePayload);
+      const propertyId = created.body.id;
+
+      const wholeUnit = await request(app.getHttpServer())
+        .post(`/api/properties/${propertyId}/units`)
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ unitLabel: 'Whole house' });
+      expect(wholeUnit.status).toBe(201);
+
+      const stillWholeOnly = await request(app.getHttpServer())
+        .get(`/api/properties/${propertyId}`)
+        .set('Authorization', `Bearer ${landlordToken}`);
+      expect(stillWholeOnly.body.hasRoomRentals).toBe(false);
+
+      const roomUnit = await request(app.getHttpServer())
+        .post(`/api/properties/${propertyId}/units`)
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ unitLabel: 'Room 1', listingType: 'PRIVATE_ROOM' });
+      expect(roomUnit.status).toBe(201);
+
+      const withRoom = await request(app.getHttpServer())
+        .get(`/api/properties/${propertyId}`)
+        .set('Authorization', `Bearer ${landlordToken}`);
+      expect(withRoom.body.hasRoomRentals).toBe(true);
+    });
+
+    it('filters the properties list by secondChance and by roomRentals', async () => {
+      const landlordToken = await registerUser('LANDLORD', 'landlord-second-chance-filter@example.com');
+
+      const secondChanceProperty = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ ...basePayload, title: 'Second Chance House', secondChanceFriendly: true });
+      expect(secondChanceProperty.status).toBe(201);
+
+      const roomRentalProperty = await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ ...basePayload, title: 'Room Rental House' });
+      expect(roomRentalProperty.status).toBe(201);
+      const roomUnit = await request(app.getHttpServer())
+        .post(`/api/properties/${roomRentalProperty.body.id}/units`)
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ unitLabel: 'Room 1', listingType: 'SHARED_ROOM' });
+      expect(roomUnit.status).toBe(201);
+
+      await request(app.getHttpServer())
+        .post('/api/properties')
+        .set('Authorization', `Bearer ${landlordToken}`)
+        .send({ ...basePayload, title: 'Plain House' });
+
+      const tenantToken = await registerUser('PROSPECTIVE_TENANT', 'tenant-second-chance-filter@example.com');
+
+      const secondChanceResults = await request(app.getHttpServer())
+        .get('/api/properties?secondChance=true')
+        .set('Authorization', `Bearer ${tenantToken}`);
+      expect(secondChanceResults.status).toBe(200);
+      expect(secondChanceResults.body.every((p: { secondChanceFriendly: boolean }) => p.secondChanceFriendly)).toBe(true);
+      expect(secondChanceResults.body.some((p: { title: string }) => p.title === 'Second Chance House')).toBe(true);
+      expect(secondChanceResults.body.some((p: { title: string }) => p.title === 'Plain House')).toBe(false);
+
+      const roomRentalResults = await request(app.getHttpServer())
+        .get('/api/properties?roomRentals=true')
+        .set('Authorization', `Bearer ${tenantToken}`);
+      expect(roomRentalResults.status).toBe(200);
+      expect(roomRentalResults.body.every((p: { hasRoomRentals: boolean }) => p.hasRoomRentals)).toBe(true);
+      expect(roomRentalResults.body.some((p: { title: string }) => p.title === 'Room Rental House')).toBe(true);
+      expect(roomRentalResults.body.some((p: { title: string }) => p.title === 'Plain House')).toBe(false);
+    });
+  });
+
   describe('Agencies directory', () => {
     it('lists property managers with at least one active assignment, ordered by managed count', async () => {
       const ownerToken = await registerUser('LANDLORD', 'owner-agency@example.com');

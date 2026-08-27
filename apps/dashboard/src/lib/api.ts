@@ -110,6 +110,8 @@ export interface PropertySummary {
   sellerFinancingAvailable: boolean;
   workForRentAvailable: boolean;
   tenantSwapAllowed: boolean;
+  secondChanceFriendly: boolean;
+  hasRoomRentals: boolean;
   viewCount: number;
   ownerId?: string;
   managerIds?: string[];
@@ -133,6 +135,7 @@ export interface UpdatePropertyPayload {
   sellerFinancingAvailable?: boolean;
   workForRentAvailable?: boolean;
   tenantSwapAllowed?: boolean;
+  secondChanceFriendly?: boolean;
 }
 
 export interface CreatePropertyPayload {
@@ -158,6 +161,7 @@ export interface CreatePropertyPayload {
   currentLeaseEndDate?: string;
   leaseToOwnAvailable?: boolean;
   sellerFinancingAvailable?: boolean;
+  secondChanceFriendly?: boolean;
 }
 
 export interface CreateUnitPayload {
@@ -493,10 +497,15 @@ export const api = {
     requestsPropertyManagementHelp?: boolean;
   }) => request<TokenPair>('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   me: (accessToken: string) => request<CurrentUser>('/users/me', {}, accessToken),
-  listProperties: (accessToken: string, filters: { type?: string; section8?: boolean } = {}) => {
+  listProperties: (
+    accessToken: string,
+    filters: { type?: string; section8?: boolean; secondChance?: boolean; roomRentals?: boolean } = {},
+  ) => {
     const params = new URLSearchParams();
     if (filters.type) params.set('type', filters.type);
     if (filters.section8) params.set('section8', 'true');
+    if (filters.secondChance) params.set('secondChance', 'true');
+    if (filters.roomRentals) params.set('roomRentals', 'true');
     const qs = params.toString();
     return request<PropertySummary[]>(`/properties${qs ? `?${qs}` : ''}`, {}, accessToken);
   },

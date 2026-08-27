@@ -95,8 +95,12 @@ export class PropertyResponseDto {
   sellerFinancingAvailable!: boolean;
   workForRentAvailable!: boolean;
   tenantSwapAllowed!: boolean;
+  secondChanceFriendly!: boolean;
   landlordDisplayName!: string;
   units!: UnitResponseDto[];
+  // Derived from units rather than stored: true when any unit is rented
+  // room-by-room (PRIVATE_ROOM/SHARED_ROOM) instead of as the entire place.
+  hasRoomRentals!: boolean;
   viewCount!: number;
   createdAt!: Date;
   updatedAt!: Date;
@@ -138,6 +142,7 @@ export class PropertyResponseDto {
       sellerFinancingAvailable: boolean;
       workForRentAvailable: boolean;
       tenantSwapAllowed: boolean;
+      secondChanceFriendly: boolean;
       viewCount: number;
       createdAt: Date;
       updatedAt: Date;
@@ -190,8 +195,10 @@ export class PropertyResponseDto {
     dto.sellerFinancingAvailable = property.sellerFinancingAvailable;
     dto.workForRentAvailable = property.workForRentAvailable;
     dto.tenantSwapAllowed = property.tenantSwapAllowed;
+    dto.secondChanceFriendly = property.secondChanceFriendly;
     dto.landlordDisplayName = property.owner?.profile?.displayName ?? 'Property Management';
     dto.units = (property.units ?? []).map((u) => UnitResponseDto.from(u));
+    dto.hasRoomRentals = (property.units ?? []).some((u) => u.listingType !== 'ENTIRE_PLACE');
     dto.viewCount = property.viewCount;
     dto.createdAt = property.createdAt;
     dto.updatedAt = property.updatedAt;
