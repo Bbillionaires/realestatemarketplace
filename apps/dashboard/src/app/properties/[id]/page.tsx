@@ -119,6 +119,8 @@ export default function PropertyDetailPage() {
   const [waitlistBusy, setWaitlistBusy] = useState(false);
   const [waitlistError, setWaitlistError] = useState<string | null>(null);
   const [waitlistQueue, setWaitlistQueue] = useState<WaitlistEntry[] | null>(null);
+  const [boostBusy, setBoostBusy] = useState(false);
+  const [boostError, setBoostError] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -243,6 +245,23 @@ export default function PropertyDetailPage() {
       setEditError(err instanceof Error ? err.message : 'Failed to save changes');
     } finally {
       setEditSaving(false);
+    }
+  }
+
+  async function purchaseBoost() {
+    if (!accessToken || !property) return;
+    setBoostBusy(true);
+    setBoostError(null);
+    try {
+      const updated = await api.purchaseBoost(accessToken, property.id);
+      if (updated.boostCheckoutUrl) {
+        window.location.href = updated.boostCheckoutUrl;
+      } else {
+        setProperty(updated);
+      }
+    } catch (err) {
+      setBoostError(err instanceof Error ? err.message : 'Failed to start checkout');
+      setBoostBusy(false);
     }
   }
 
@@ -849,6 +868,41 @@ export default function PropertyDetailPage() {
                   </button>
                 </div>
               </div>
+            )}
+          </div>
+        )}
+
+        {canManage && (
+          <div style={{ marginTop: 16, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>Featured Listing Boost</h3>
+            {property.boostedUntil && new Date(property.boostedUntil).getTime() > Date.now() ? (
+              <p style={{ fontSize: 13, color: theme.primaryDark, marginTop: 8, marginBottom: 0, fontWeight: 600 }}>
+                Boosted through {new Date(property.boostedUntil).toLocaleDateString()} — this listing surfaces first in
+                search results until then.
+              </p>
+            ) : (
+              <>
+                <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 8, marginBottom: 12 }}>
+                  Pay a flat fee to surface this listing first in search results for 30 days.
+                </p>
+                <button
+                  onClick={purchaseBoost}
+                  disabled={boostBusy}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: theme.primary,
+                    color: 'white',
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {boostBusy ? 'Starting checkout...' : 'Boost this listing'}
+                </button>
+                {boostError && <p style={{ color: theme.danger, fontSize: 13, marginTop: 8 }}>{boostError}</p>}
+              </>
             )}
           </div>
         )}

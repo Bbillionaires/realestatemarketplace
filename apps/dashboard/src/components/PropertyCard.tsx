@@ -27,6 +27,7 @@ export function PropertyCard({ property }: { property: PropertySummary }) {
   const available = unit ? unit.isAvailable : property.isActive;
   const perks = PERK_BADGES.filter((p) => property[p.flag]);
   const willingToSell = isWillingToSellToTenant(property);
+  const isBoosted = property.boostedUntil !== null && new Date(property.boostedUntil).getTime() > Date.now();
 
   return (
     <Link
@@ -87,8 +88,22 @@ export function PropertyCard({ property }: { property: PropertySummary }) {
           {property.addressLine1}, {property.city}, {property.state} {property.zip}
         </div>
 
-        {(property.sellingSoon || perks.length > 0) && (
+        {(isBoosted || property.sellingSoon || perks.length > 0) && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {isBoosted && (
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: theme.gold,
+                  background: theme.primaryLight,
+                  padding: '3px 8px',
+                  borderRadius: 999,
+                }}
+              >
+                ★ Featured
+              </span>
+            )}
             {property.sellingSoon && (
               <span
                 style={{

@@ -96,6 +96,12 @@ export class PropertiesController {
     return this.propertiesService.update(user, id, dto);
   }
 
+  @Post(':id/boost')
+  @AuditLog('property.boost_checkout', 'Property')
+  purchaseBoost(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.propertiesService.purchaseBoost(user, id);
+  }
+
   // Public, same reasoning as GET /feed — this fires when a logged-out
   // visitor flips a feed card, well before any login.
   @Post(':id/view')

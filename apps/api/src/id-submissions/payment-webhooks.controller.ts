@@ -4,6 +4,8 @@ import { Public } from '../common/decorators/public.decorator';
 import { IdSubmissionsService } from './id-submissions.service';
 import { GigJobsService } from '../gig-jobs/gig-jobs.service';
 import { JobReferralsService } from '../job-referrals/job-referrals.service';
+import { PropertiesService } from '../properties/properties.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 /**
  * Unauthenticated by JWT — the payment processor (or the mock provider's
@@ -21,6 +23,8 @@ export class PaymentWebhooksController {
     private readonly idSubmissionsService: IdSubmissionsService,
     private readonly gigJobsService: GigJobsService,
     private readonly jobReferralsService: JobReferralsService,
+    private readonly propertiesService: PropertiesService,
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   @Post()
@@ -35,6 +39,8 @@ export class PaymentWebhooksController {
     await this.idSubmissionsService.handlePaymentWebhook(signature ?? '', url, rawBody);
     await this.gigJobsService.handlePaymentWebhook(signature ?? '', url, rawBody);
     await this.jobReferralsService.handlePaymentWebhook(signature ?? '', url, rawBody);
+    await this.propertiesService.handlePaymentWebhook(signature ?? '', url, rawBody);
+    await this.subscriptionsService.handlePaymentWebhook(signature ?? '', url, rawBody);
     return { status: 'ok' };
   }
 }

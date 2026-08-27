@@ -9,6 +9,8 @@ import { GEOCODING_PROVIDER } from '../geocoding/geocoding.constants';
 import { GeocodingProvider } from '../geocoding/interfaces/geocoding-provider.interface';
 import { SCHOOLS_PROVIDER } from '../schools/schools.constants';
 import { SchoolsProvider } from '../schools/interfaces/schools-provider.interface';
+import { PAYMENT_PROVIDER } from '../payments/payments.constants';
+import { PaymentProvider } from '../payments/interfaces/payment-provider.interface';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
@@ -59,6 +61,7 @@ export class PropertiesService {
     private readonly configService: ConfigService<AppConfig>,
     @Inject(GEOCODING_PROVIDER) private readonly geocodingProvider: GeocodingProvider,
     @Inject(SCHOOLS_PROVIDER) private readonly schoolsProvider: SchoolsProvider,
+    @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
   ) {}
 
   async create(actor: AuthenticatedUser, dto: CreatePropertyDto): Promise<PropertyResponseDto> {
@@ -102,11 +105,17 @@ export class PropertiesService {
       units: roomRentals === true ? { some: { listingType: { in: ['PRIVATE_ROOM', 'SHARED_ROOM'] as UnitListingType[] } } } : undefined,
     };
 
+    // A Featured Listing Boost surfaces a property first: non-null
+    // boostedUntil sorts ahead of never-boosted (null) listings, most
+    // recently boosted first among those. Only meaningful for search —
+    // the landlord/manager "my own listings" branch below skips it.
+    const boostedFirstOrder = [{ boostedUntil: { sort: 'desc' as const, nulls: 'last' as const } }, { createdAt: 'desc' as const }];
+
     if (!actor || actor.role === Role.PROSPECTIVE_TENANT || actor.role === Role.CURRENT_TENANT) {
       const properties = await this.prisma.property.findMany({
         where: { isActive: true, ...commonFilters },
         include: PROPERTY_INCLUDE,
-        orderBy: { createdAt: 'desc' },
+        orderBy: boostedFirstOrder,
         skip,
         take,
       });
@@ -117,7 +126,7 @@ export class PropertiesService {
       const properties = await this.prisma.property.findMany({
         where: { ...commonFilters },
         include: PROPERTY_INCLUDE,
-        orderBy: { createdAt: 'desc' },
+        orderBy: boostedFirstOrder,
         skip,
         take,
       });
@@ -514,6 +523,67 @@ export class PropertiesService {
       covered: true,
       matches,
     };
+  }
+
+  /**
+   * "Featured Listing Boost": a flat one-time fee that surfaces this
+   * property first in search results for `paidPeriodDays` (30 by default).
+   * Owner/manager/staff only, mirroring update()'s authorization.
+   */
+  async purchaseBoost(actor: AuthenticatedUser, propertyId: string): Promise<PropertyResponseDto> {
+    const property = await this.prisma.property.findUnique({ where: { id: propertyId }, include: PROPERTY_INCLUDE });
+    if (!property) {
+      throw new NotFoundException('Property not found');
+    }
+    await this.assertCanManage(actor, property);
+
+    const feeCents = this.configService.get('featuredBoostFeeCents', { infer: true }) as number;
+    const dashboardBaseUrl = this.configService.get('dashboardBaseUrl', { infer: true });
+    const checkout = await this.paymentProvider.createCheckout({
+      amountCents: feeCents,
+      description: `Featured Listing Boost — ${property.title}`,
+      referenceId: property.id,
+      redirectUrl: `${dashboardBaseUrl}/properties/${property.id}?boostPaid=1`,
+    });
+
+    const updated = await this.prisma.property.update({
+      where: { id: propertyId },
+      data: {
+        boostPaymentProviderCheckoutId: checkout.providerCheckoutId,
+        boostPaymentOrderId: checkout.providerOrderId,
+        boostCheckoutUrl: checkout.checkoutUrl,
+      },
+      include: PROPERTY_INCLUDE,
+    });
+    return PropertyResponseDto.from(updated, { includeManagement: true });
+  }
+
+  async handlePaymentWebhook(signature: string, url: string, rawBody: string): Promise<void> {
+    const valid = this.paymentProvider.validateWebhook({ signature, url, rawBody });
+    if (!valid) {
+      throw new BadRequestException('Invalid webhook signature');
+    }
+
+    const event = this.paymentProvider.parseWebhookEvent(rawBody);
+    if (!event || !event.paid) {
+      return;
+    }
+
+    const property = await this.prisma.property.findFirst({
+      where: { boostPaymentOrderId: event.providerOrderId },
+    });
+    if (!property) {
+      return;
+    }
+
+    const periodDays = this.configService.get('paidPeriodDays', { infer: true }) as number;
+    await this.prisma.property.update({
+      where: { id: property.id },
+      data: {
+        boostedUntil: new Date(Date.now() + periodDays * 24 * 60 * 60 * 1000),
+        boostPaymentOrderId: null,
+      },
+    });
   }
 
   private async canManage(

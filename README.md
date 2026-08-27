@@ -69,7 +69,12 @@ apps/
                          Matcher": looks up that zip/bedroom's payment standard and returns every active,
                          Section-8-accepting listing in that zip priced at or below it — by rent alone, not by
                          the unit's own bedroom count, since a voucher's payment standard is set by the
-                         *voucher's* bedroom allowance rather than the unit being rented. Three routes are
+                         *voucher's* bedroom allowance rather than the unit being rented. `POST
+                         /properties/:id/boost` (owner/manager/staff) is the "Featured Listing Boost": a flat,
+                         PaymentProvider-charged fee that sets `boostedUntil` 30 days out on payment; `GET
+                         /properties` ranks a non-expired `boostedUntil` first (nulls last), falling back to
+                         `createdAt` desc, for every role branch except a landlord/manager's own-listings view.
+                         Three routes are
                          `@Public()` (no JWT) rather than the RBAC every other property route requires:
                          `GET /properties/feed`, `POST /properties/:id/view`, and `GET
                          /properties/voucher-matcher` — the first pair backing the
@@ -108,8 +113,14 @@ apps/
                          both charged through the existing PaymentProvider checkout. A sponsored listing
                          bypasses the own-tenant scoping entirely and shows to every tenant on the
                          platform — that reach is exactly what the employer is paying for
+      subscriptions/     Landlord Pro ($49/mo) / Unlimited ($99/mo) tiers — a flat, manually-renewed
+                         30-day period paid via the existing PaymentProvider checkout, not
+                         processor-side recurring billing (nothing in PaymentProvider models a real
+                         subscription). One `LandlordSubscription` row per landlord, upserted to FREE
+                         on first `GET /subscriptions/me`
       payments/          PaymentProvider interface, Mock provider, Square provider (Payment Links API
-                         + webhook signature verification) — shared by id-submissions and gig-jobs
+                         + webhook signature verification) — shared by id-submissions, gig-jobs,
+                         subscriptions, and a property's Featured Listing Boost
       geocoding/         GeocodingProvider interface, Mock provider, US Census Bureau provider
       schools/           SchoolsProvider interface, Mock provider, GreatSchools provider
       realtime/          Socket.IO gateway broadcasting new messages / conversation / showing updates
@@ -393,6 +404,9 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | GET | `/properties/:id/schools` | Cached nearby-schools list (name, level, rating, distance) |
 | POST | `/properties/:id/schools/refresh` | Owner/manager/staff only — forces a re-geocode + schools refresh |
 | GET | `/properties/rent-estimate` | Address-specific (not city/zip-bucketed): geocodes `addressLine1`/`city`/`state`/`zip` and averages rent from units within a radius of those coordinates |
+| POST | `/properties/:id/boost` | Owner/manager/staff only — starts a Featured Listing Boost checkout; the payment webhook sets `boostedUntil` 30 days out |
+| GET | `/subscriptions/me` | Landlord (or staff) only — auto-creates a FREE `LandlordSubscription` row on first read |
+| POST | `/subscriptions/checkout` | Landlord (or staff) only — `{ tier: 'PRO' \| 'UNLIMITED' }` starts a $49/$99 checkout; the payment webhook applies the tier with a fresh 30-day `expiresAt` |
 | POST | `/conversations` | Tenant-only: starts (or reuses) a conversation + sends the first message. Optional `unitId`/`bedId` scopes it to a specific room/bed |
 | GET | `/conversations`, `/conversations/:id` | Participant (or staff/admin) only |
 | GET/POST | `/conversations/:id/messages` | Send runs the moderation gate before any relay/forward |
@@ -404,7 +418,7 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | GET/POST | `/conversations/:id/id-submissions` | Tenant-only: starts (or reuses) a $5 ID-submission checkout for that conversation |
 | PATCH | `/id-submissions/:id/cancel` | Tenant cancels their own unpaid submission |
 | POST | `/id-submissions/:id/submit` | Tenant uploads the ID file once paid — emailed to the current landlord-side contact, never stored |
-| POST | `/payments/webhooks` | Payment processor (or the mock provider's dev checkout page) confirms a completed charge — shared by ID submissions, gig jobs, and sponsored job listings |
+| POST | `/payments/webhooks` | Payment processor (or the mock provider's dev checkout page) confirms a completed charge — shared by ID submissions, gig jobs, sponsored job listings, landlord subscriptions, and property boosts |
 | GET | `/gig-jobs` | Tenant view: open gigs visible to them (own landlord's + admin's) plus anything they've claimed |
 | GET | `/gig-jobs/posted` | Poster view: every gig this landlord/manager/admin has posted |
 | POST | `/gig-jobs` | Landlord/property manager (scoped to their own tenants) or admin (platform-wide) |

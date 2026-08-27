@@ -96,6 +96,7 @@ export class PropertyResponseDto {
   workForRentAvailable!: boolean;
   tenantSwapAllowed!: boolean;
   secondChanceFriendly!: boolean;
+  boostedUntil!: Date | null;
   landlordDisplayName!: string;
   units!: UnitResponseDto[];
   // Derived from units rather than stored: true when any unit is rented
@@ -109,6 +110,7 @@ export class PropertyResponseDto {
   // manager, staff, or admin).
   ownerId?: string;
   managerIds?: string[];
+  boostCheckoutUrl?: string | null;
 
   static from(
     property: {
@@ -143,6 +145,8 @@ export class PropertyResponseDto {
       workForRentAvailable: boolean;
       tenantSwapAllowed: boolean;
       secondChanceFriendly: boolean;
+      boostedUntil: Date | null;
+      boostCheckoutUrl: string | null;
       viewCount: number;
       createdAt: Date;
       updatedAt: Date;
@@ -196,6 +200,7 @@ export class PropertyResponseDto {
     dto.workForRentAvailable = property.workForRentAvailable;
     dto.tenantSwapAllowed = property.tenantSwapAllowed;
     dto.secondChanceFriendly = property.secondChanceFriendly;
+    dto.boostedUntil = property.boostedUntil;
     dto.landlordDisplayName = property.owner?.profile?.displayName ?? 'Property Management';
     dto.units = (property.units ?? []).map((u) => UnitResponseDto.from(u));
     dto.hasRoomRentals = (property.units ?? []).some((u) => u.listingType !== 'ENTIRE_PLACE');
@@ -205,6 +210,7 @@ export class PropertyResponseDto {
 
     if (options.includeManagement) {
       dto.ownerId = property.ownerId;
+      dto.boostCheckoutUrl = property.boostCheckoutUrl;
       dto.managerIds = (property.managerAssignments ?? [])
         .filter((a) => !a.revokedAt)
         .map((a) => a.userId);

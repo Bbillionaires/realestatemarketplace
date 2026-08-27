@@ -358,6 +358,7 @@ model User {
   gigVouchersIssued     GigVoucher[]                 @relation("GigVoucherLandlord")
   jobReferralsPosted    JobReferral[]                @relation("JobReferralPoster")
   jobReferralClicks     JobReferralClick[]           @relation("JobReferralClickTenant")
+  landlordSubscription  LandlordSubscription?
 
   @@index([role])
 }
@@ -502,6 +503,18 @@ model Property {
   // demographic language) is what stays fair-housing-safe.
   secondChanceFriendly      Boolean @default(false)
 
+  // "Featured Listing Boost": a flat one-time fee that surfaces this
+  // property first in search results for 30 days. `boostedUntil` in the
+  // future means currently boosted; a lapsed (past) or null value means
+  // not boosted — findAll() ranks boostedUntil > now first, then falls
+  // back to createdAt desc. The three `boostPayment*` fields track an
+  // outstanding checkout the same way IdSubmission tracks its payment
+  // fields, and are cleared once the webhook applies it.
+  boostedUntil                   DateTime?
+  boostPaymentProviderCheckoutId String?
+  boostPaymentOrderId            String?
+  boostCheckoutUrl               String?
+
   // Incremented once per flip-to-details on the public home feed (see
   // PropertiesService.recordView) — the popularity signal the feed's
   // weighted-random sampling favors. Not a page-view counter; a property
@@ -522,6 +535,7 @@ model Property {
   @@index([ownerId])
   @@index([city, state])
   @@index([latitude, longitude])
+  @@index([boostPaymentOrderId])
 }
 
 model PropertyUnit {
@@ -894,6 +908,40 @@ model IdSubmission {
   updatedAt         DateTime           @updatedAt
 
   @@index([conversationId])
+  @@index([paymentOrderId])
+}
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  UNLIMITED
+}
+
+// One row per landlord/property manager, upserted to FREE the first time
+// GET /subscriptions/me is called. A paid tier is a flat 30-day period a
+// landlord pays to renew — not processor-side recurring billing (nothing in
+// this codebase's PaymentProvider abstraction models a subscription, only a
+// one-time checkout), so `expiresAt` simply lapses back to FREE-equivalent
+// behavior if never renewed; nothing here auto-charges.
+model LandlordSubscription {
+  id       String           @id @default(uuid())
+  userId   String           @unique
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier     SubscriptionTier @default(FREE)
+  expiresAt DateTime?
+
+  // Set while a checkout for an upgrade/renewal is outstanding; applied to
+  // `tier` (with a fresh expiresAt) once the payment webhook confirms
+  // payment, then cleared — mirrors IdSubmission's AWAITING_PAYMENT guard,
+  // making webhook redelivery a no-op.
+  pendingTier               SubscriptionTier?
+  paymentProviderCheckoutId String?
+  paymentOrderId            String?
+  checkoutUrl               String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([paymentOrderId])
 }
 

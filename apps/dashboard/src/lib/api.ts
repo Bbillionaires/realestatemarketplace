@@ -112,9 +112,11 @@ export interface PropertySummary {
   tenantSwapAllowed: boolean;
   secondChanceFriendly: boolean;
   hasRoomRentals: boolean;
+  boostedUntil: string | null;
   viewCount: number;
   ownerId?: string;
   managerIds?: string[];
+  boostCheckoutUrl?: string | null;
 }
 
 export interface UpdatePropertyPayload {
@@ -216,6 +218,16 @@ export interface VoucherMatch {
   effectiveDate: string | null;
   covered: boolean;
   matches: PropertySummary[];
+}
+
+export type SubscriptionTier = 'FREE' | 'PRO' | 'UNLIMITED';
+
+export interface Subscription {
+  tier: SubscriptionTier;
+  expiresAt: string | null;
+  isActive: boolean;
+  pendingTier: SubscriptionTier | null;
+  checkoutUrl: string | null;
 }
 
 export interface WaitlistEntry {
@@ -528,6 +540,8 @@ export const api = {
     request<PropertySummary>('/properties', { method: 'POST', body: JSON.stringify(payload) }, accessToken),
   updateProperty: (accessToken: string, id: string, payload: UpdatePropertyPayload) =>
     request<PropertySummary>(`/properties/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }, accessToken),
+  purchaseBoost: (accessToken: string, id: string) =>
+    request<PropertySummary>(`/properties/${id}/boost`, { method: 'POST' }, accessToken),
   createUnit: (accessToken: string, propertyId: string, payload: CreateUnitPayload) =>
     request<UnitSummary>(`/properties/${propertyId}/units`, { method: 'POST', body: JSON.stringify(payload) }, accessToken),
   updateUnit: (accessToken: string, propertyId: string, unitId: string, payload: Partial<CreateUnitPayload>) =>
@@ -553,6 +567,9 @@ export const api = {
   refreshNearbySchools: (accessToken: string, propertyId: string) =>
     request<NearbySchool[]>(`/properties/${propertyId}/schools/refresh`, { method: 'POST' }, accessToken),
   listAgencies: (accessToken: string) => request<AgencySummary[]>('/properties/agencies', {}, accessToken),
+  getSubscription: (accessToken: string) => request<Subscription>('/subscriptions/me', {}, accessToken),
+  createSubscriptionCheckout: (accessToken: string, tier: 'PRO' | 'UNLIMITED') =>
+    request<Subscription>('/subscriptions/checkout', { method: 'POST', body: JSON.stringify({ tier }) }, accessToken),
   getRentEstimate: (
     accessToken: string,
     params: { addressLine1: string; city: string; state: string; zip: string; bedrooms?: number },

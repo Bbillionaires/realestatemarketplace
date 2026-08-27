@@ -25,6 +25,11 @@ export interface AppConfig {
     webhookSignatureKey: string;
   };
   idSubmissionFeeCents: number;
+  landlordProFeeCents: number;
+  landlordUnlimitedFeeCents: number;
+  featuredBoostFeeCents: number;
+  /** Length of a paid Landlord Pro/Unlimited period and a Featured Listing Boost — both are flat, manually-renewed periods, not recurring billing. */
+  paidPeriodDays: number;
   geocodingProvider: 'mock' | 'census';
   schoolsProvider: 'mock' | 'greatschools';
   greatschools: {
@@ -81,6 +86,10 @@ export default (): AppConfig => ({
     webhookSignatureKey: process.env.SQUARE_WEBHOOK_SIGNATURE_KEY ?? '',
   },
   idSubmissionFeeCents: parseInt(process.env.ID_SUBMISSION_FEE_CENTS ?? '500', 10),
+  landlordProFeeCents: parseInt(process.env.LANDLORD_PRO_FEE_CENTS ?? '4900', 10),
+  landlordUnlimitedFeeCents: parseInt(process.env.LANDLORD_UNLIMITED_FEE_CENTS ?? '9900', 10),
+  featuredBoostFeeCents: parseInt(process.env.FEATURED_BOOST_FEE_CENTS ?? '2900', 10),
+  paidPeriodDays: parseInt(process.env.PAID_PERIOD_DAYS ?? '30', 10),
   geocodingProvider: (process.env.GEOCODING_PROVIDER as 'mock' | 'census') ?? 'mock',
   schoolsProvider: (process.env.SCHOOLS_PROVIDER as 'mock' | 'greatschools') ?? 'mock',
   greatschools: {
