@@ -490,6 +490,35 @@ export interface IdSubmissionSummary {
   createdAt: string;
 }
 
+export type HqsInspectionStatus = 'AWAITING_PAYMENT' | 'PAID' | 'REQUESTED' | 'CANCELLED';
+
+export interface HqsInspectionSummary {
+  id: string;
+  propertyId: string;
+  feeCents: number;
+  status: HqsInspectionStatus;
+  checkoutUrl: string | null;
+  paidAt: string | null;
+  preferredDateNote: string | null;
+  requestedAt: string | null;
+  emailSent: boolean;
+  createdAt: string;
+}
+
+export type TenantPacketStatus = 'NOT_STARTED' | 'AWAITING_PAYMENT' | 'PAID' | 'SUBMITTED';
+
+export interface TenantPacketSummary {
+  id: string | null;
+  feeCents: number;
+  status: TenantPacketStatus;
+  checkoutUrl: string | null;
+  paidAt: string | null;
+  incomeProofFileName: string | null;
+  backgroundExplanation: string | null;
+  references: string | null;
+  submittedAt: string | null;
+}
+
 export interface StartConversationResult {
   conversation: ConversationSummary;
   message: MessageSummary;
@@ -739,6 +768,33 @@ export const api = {
     formData.set('file', file);
     return requestMultipart<IdSubmissionSummary>(`/id-submissions/${id}/submit`, formData, accessToken);
   },
+  listHqsInspections: (accessToken: string, propertyId: string) =>
+    request<HqsInspectionSummary[]>(`/properties/${propertyId}/hqs-inspections`, {}, accessToken),
+  createHqsInspection: (accessToken: string, propertyId: string) =>
+    request<HqsInspectionSummary>(`/properties/${propertyId}/hqs-inspections`, { method: 'POST' }, accessToken),
+  cancelHqsInspection: (accessToken: string, id: string) =>
+    request<HqsInspectionSummary>(`/hqs-inspections/${id}/cancel`, { method: 'PATCH' }, accessToken),
+  requestHqsInspection: (accessToken: string, id: string, preferredDateNote?: string) =>
+    request<HqsInspectionSummary>(
+      `/hqs-inspections/${id}/request`,
+      { method: 'POST', body: JSON.stringify({ preferredDateNote }) },
+      accessToken,
+    ),
+  getTenantPacket: (accessToken: string) => request<TenantPacketSummary>('/tenant-packet/me', {}, accessToken),
+  createTenantPacketCheckout: (accessToken: string) =>
+    request<TenantPacketSummary>('/tenant-packet/checkout', { method: 'POST' }, accessToken),
+  submitTenantPacket: (
+    accessToken: string,
+    payload: { backgroundExplanation?: string; references?: string; file?: File },
+  ) => {
+    const formData = new FormData();
+    if (payload.backgroundExplanation) formData.set('backgroundExplanation', payload.backgroundExplanation);
+    if (payload.references) formData.set('references', payload.references);
+    if (payload.file) formData.set('file', payload.file);
+    return requestMultipart<TenantPacketSummary>('/tenant-packet/submit', formData, accessToken);
+  },
+  shareTenantPacket: (accessToken: string, conversationId: string) =>
+    request<{ emailed: boolean }>(`/conversations/${conversationId}/tenant-packet/share`, { method: 'POST' }, accessToken),
   /** Dev/test only — stands in for the real payment processor calling our webhook after a completed charge. */
   simulateMockPayment: (providerOrderId: string) =>
     request<{ status: string }>('/payments/webhooks', {

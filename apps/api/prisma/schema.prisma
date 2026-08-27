@@ -359,6 +359,8 @@ model User {
   jobReferralsPosted    JobReferral[]                @relation("JobReferralPoster")
   jobReferralClicks     JobReferralClick[]           @relation("JobReferralClickTenant")
   landlordSubscription  LandlordSubscription?
+  hqsInspectionRequests HqsInspectionRequest[]
+  tenantPacket          TenantPacket?
 
   @@index([role])
 }
@@ -531,6 +533,7 @@ model Property {
   lenderAssignments   LenderAssignment[]
   nearbySchools       NearbySchool[]
   gigJobs             GigJob[]
+  hqsInspectionRequests HqsInspectionRequest[]
 
   @@index([ownerId])
   @@index([city, state])
@@ -938,6 +941,89 @@ model LandlordSubscription {
   paymentProviderCheckoutId String?
   paymentOrderId            String?
   checkoutUrl               String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([paymentOrderId])
+}
+
+enum HqsInspectionStatus {
+  AWAITING_PAYMENT
+  PAID
+  // Landlord has supplied a preferred date/note after paying, emailed to
+  // the inspections team — this platform has no real inspector-assignment
+  // or scheduling workflow, so REQUESTED is the terminal state, the same
+  // way an IdSubmission's "email it and stop tracking" is terminal.
+  REQUESTED
+  CANCELLED
+}
+
+// A landlord/manager-requested HQS pre-inspection walkthrough for one
+// property: pay a flat $199 fee, then supply a preferred date/note that's
+// emailed to the inspections team — mirrors IdSubmission's
+// pay-then-fee-gated-action shape, just property-scoped instead of
+// conversation-scoped, and emailing an internal team instead of a landlord.
+model HqsInspectionRequest {
+  id            String              @id @default(uuid())
+  propertyId    String
+  property      Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  requestedById String
+  requestedBy   User                @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+  feeCents      Int                 @default(19900)
+  status        HqsInspectionStatus @default(AWAITING_PAYMENT)
+
+  paymentProviderCheckoutId String?
+  paymentOrderId            String?
+  checkoutUrl               String?
+  paidAt                    DateTime?
+
+  preferredDateNote String?
+  requestedAt       DateTime?
+  emailSent         Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([propertyId])
+  @@index([paymentOrderId])
+}
+
+enum TenantPacketStatus {
+  NOT_STARTED
+  AWAITING_PAYMENT
+  PAID
+  SUBMITTED
+}
+
+// A tenant's reusable "Fast-Track" application packet: pay a flat $29 fee
+// once, fill it out once, then share it into any conversation — unlike
+// IdSubmission (created fresh per-conversation, since ID verification is
+// specific to one landlord relationship), the whole point of a Fast-Track
+// packet is not re-paying/re-typing the same income proof and background
+// explanation for every landlord a tenant messages. One row per tenant.
+model TenantPacket {
+  id       String             @id @default(uuid())
+  tenantId String             @unique
+  tenant   User               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  feeCents Int                @default(2900)
+  status   TenantPacketStatus @default(NOT_STARTED)
+
+  paymentProviderCheckoutId String?
+  paymentOrderId            String?
+  checkoutUrl               String?
+  paidAt                    DateTime?
+
+  // Unlike IdSubmission (which emails an uploaded file immediately and
+  // never stores it), a Fast-Track packet is filled out once and shared
+  // into many conversations afterward, so the file itself has to be
+  // persisted somewhere to attach on each later share.
+  incomeProofFileName  String?
+  incomeProofMimeType  String?
+  incomeProofFile      Bytes?
+  backgroundExplanation String?
+  references           String?
+  submittedAt           DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

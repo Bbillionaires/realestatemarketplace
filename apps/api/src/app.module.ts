@@ -28,6 +28,8 @@ import { IdSubmissionsModule } from './id-submissions/id-submissions.module';
 import { GigJobsModule } from './gig-jobs/gig-jobs.module';
 import { JobReferralsModule } from './job-referrals/job-referrals.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { HqsInspectionsModule } from './hqs-inspections/hqs-inspections.module';
+import { TenantPacketsModule } from './tenant-packets/tenant-packets.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -74,6 +76,8 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     GigJobsModule,
     JobReferralsModule,
     SubscriptionsModule,
+    HqsInspectionsModule,
+    TenantPacketsModule,
   ],
   providers: [
     // Order matters: JwtAuthGuard populates request.user, then RolesGuard

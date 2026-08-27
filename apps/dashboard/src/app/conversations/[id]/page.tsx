@@ -27,6 +27,9 @@ export default function ConversationThreadPage() {
   const [messages, setMessages] = useState<MessageSummary[]>([]);
   const [showing, setShowing] = useState<ShowingSummary | null>(null);
   const [idSubmission, setIdSubmission] = useState<IdSubmissionSummary | null>(null);
+  const [packetShareBusy, setPacketShareBusy] = useState(false);
+  const [packetShareError, setPacketShareError] = useState<string | null>(null);
+  const [packetShared, setPacketShared] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,6 +119,20 @@ export default function ConversationThreadPage() {
     if (!accessToken) return;
     const updated = await api.submitIdSubmission(accessToken, submissionId, file, note);
     setIdSubmission(updated);
+  }
+
+  async function handleShareTenantPacket() {
+    if (!accessToken) return;
+    setPacketShareBusy(true);
+    setPacketShareError(null);
+    try {
+      await api.shareTenantPacket(accessToken, id);
+      setPacketShared(true);
+    } catch (err) {
+      setPacketShareError(err instanceof Error ? err.message : 'Failed to share your Fast-Track packet');
+    } finally {
+      setPacketShareBusy(false);
+    }
   }
 
   async function submitReply() {
@@ -248,6 +265,29 @@ export default function ConversationThreadPage() {
           onCancel={handleCancelIdSubmission}
           onSubmit={handleSubmitId}
         />
+
+        {isTenantView && (
+          <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 10, padding: 14, marginTop: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <strong style={{ fontSize: 13 }}>Fast-Track profile packet</strong>
+              <button
+                onClick={handleShareTenantPacket}
+                disabled={packetShareBusy}
+                style={{ border: 'none', background: theme.primary, color: 'white', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}
+              >
+                {packetShareBusy ? 'Sharing...' : packetShared ? 'Shared ✓' : 'Share with this landlord'}
+              </button>
+            </div>
+            <p style={{ fontSize: 12, color: theme.textMuted, margin: '4px 0 0' }}>
+              Sends your income proof, background explanation, and references from{' '}
+              <Link href="/tenant-packet" style={{ color: theme.primary, fontWeight: 600 }}>
+                your Fast-Track packet
+              </Link>{' '}
+              directly to this landlord.
+            </p>
+            {packetShareError && <p style={{ color: theme.danger, fontSize: 12, marginTop: 6, marginBottom: 0 }}>{packetShareError}</p>}
+          </div>
+        )}
 
         {guidance && (
           <p style={{ background: theme.warningBg, color: theme.warningText, padding: 10, borderRadius: 8, fontSize: 13, marginTop: 12 }}>

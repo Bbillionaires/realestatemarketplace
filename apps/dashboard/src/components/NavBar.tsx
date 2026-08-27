@@ -26,6 +26,7 @@ const RENTER_LINKS: NavLink[] = [
   { href: '/second-chance', label: 'Second-Chance Friendly' },
   { href: '/rooms', label: 'Room & Co-Living Rentals' },
   { href: '/waitlists', label: 'Waiting Lists' },
+  { href: '/tenant-packet', label: 'Fast-Track Packet' },
 ];
 
 const OWNER_LINKS: NavLink[] = [

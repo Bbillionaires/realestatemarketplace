@@ -118,9 +118,22 @@ apps/
                          processor-side recurring billing (nothing in PaymentProvider models a real
                          subscription). One `LandlordSubscription` row per landlord, upserted to FREE
                          on first `GET /subscriptions/me`
+      hqs-inspections/   Landlord/manager pays a flat $199 fee (PaymentProvider checkout) for one
+                         property, then supplies a preferred date/note that's emailed to the
+                         inspections team — same pay-then-fee-gated-action shape as id-submissions,
+                         just property-scoped and emailing an internal team instead of a landlord
+      tenant-packets/    A tenant's reusable "Fast-Track" application packet: pay a flat $29 fee
+                         *once* (unlike id-submissions, created fresh per conversation), fill out
+                         income proof / background explanation / references once, then share the
+                         same packet into any conversation via `POST
+                         /conversations/:id/tenant-packet/share`. Because it has to survive being
+                         shared into future conversations, the income-proof file is actually
+                         persisted (`Bytes` column) rather than emailed-and-discarded like
+                         id-submissions — the one deliberate divergence from that pattern
       payments/          PaymentProvider interface, Mock provider, Square provider (Payment Links API
                          + webhook signature verification) — shared by id-submissions, gig-jobs,
-                         subscriptions, and a property's Featured Listing Boost
+                         subscriptions, a property's Featured Listing Boost, HQS inspections, and
+                         tenant Fast-Track packets
       geocoding/         GeocodingProvider interface, Mock provider, US Census Bureau provider
       schools/           SchoolsProvider interface, Mock provider, GreatSchools provider
       realtime/          Socket.IO gateway broadcasting new messages / conversation / showing updates
@@ -418,7 +431,14 @@ All routes are prefixed with `/api`. Every route except `/auth/*` and `/sms/webh
 | GET/POST | `/conversations/:id/id-submissions` | Tenant-only: starts (or reuses) a $5 ID-submission checkout for that conversation |
 | PATCH | `/id-submissions/:id/cancel` | Tenant cancels their own unpaid submission |
 | POST | `/id-submissions/:id/submit` | Tenant uploads the ID file once paid — emailed to the current landlord-side contact, never stored |
-| POST | `/payments/webhooks` | Payment processor (or the mock provider's dev checkout page) confirms a completed charge — shared by ID submissions, gig jobs, sponsored job listings, landlord subscriptions, and property boosts |
+| GET/POST | `/properties/:propertyId/hqs-inspections` | Owner/manager/staff only — list or start a $199 HQS pre-inspection checkout for that property |
+| PATCH | `/hqs-inspections/:id/cancel` | Owner/manager/staff cancels their own unpaid request |
+| POST | `/hqs-inspections/:id/request` | Owner/manager/staff supplies a preferred date/note once paid — emailed to the inspections team, terminal REQUESTED state |
+| GET | `/tenant-packet/me` | Tenant only — `NOT_STARTED` if no row exists yet (no auto-create, unlike subscriptions) |
+| POST | `/tenant-packet/checkout` | Tenant only — starts a $29 checkout; rejects if already paid (one-time fee, not renewed) |
+| POST | `/tenant-packet/submit` | Tenant only, requires PAID/SUBMITTED — (re)fills out income proof file + background explanation + references; reusable, so the file is persisted rather than emailed-and-discarded |
+| POST | `/conversations/:conversationId/tenant-packet/share` | Tenant-participant only, requires SUBMITTED — emails the packet (with the income-proof attachment) to that conversation's landlord-side contact; callable again for any other conversation without re-paying |
+| POST | `/payments/webhooks` | Payment processor (or the mock provider's dev checkout page) confirms a completed charge — shared by ID submissions, gig jobs, sponsored job listings, landlord subscriptions, property boosts, HQS inspections, and tenant Fast-Track packets |
 | GET | `/gig-jobs` | Tenant view: open gigs visible to them (own landlord's + admin's) plus anything they've claimed |
 | GET | `/gig-jobs/posted` | Poster view: every gig this landlord/manager/admin has posted |
 | POST | `/gig-jobs` | Landlord/property manager (scoped to their own tenants) or admin (platform-wide) |

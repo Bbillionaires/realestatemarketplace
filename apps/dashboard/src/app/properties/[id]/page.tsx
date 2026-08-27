@@ -6,6 +6,7 @@ import Link from 'next/link';
 import {
   api,
   BedSummary,
+  HqsInspectionSummary,
   NearbySchool,
   PropertySummary,
   SewerSourceType,
@@ -121,6 +122,10 @@ export default function PropertyDetailPage() {
   const [waitlistQueue, setWaitlistQueue] = useState<WaitlistEntry[] | null>(null);
   const [boostBusy, setBoostBusy] = useState(false);
   const [boostError, setBoostError] = useState<string | null>(null);
+  const [hqsInspection, setHqsInspection] = useState<HqsInspectionSummary | null>(null);
+  const [hqsBusy, setHqsBusy] = useState(false);
+  const [hqsError, setHqsError] = useState<string | null>(null);
+  const [hqsDateNote, setHqsDateNote] = useState('');
 
   useEffect(() => {
     if (authLoading) return;
@@ -174,6 +179,14 @@ export default function PropertyDetailPage() {
     api
       .listPropertyWaitlist(accessToken, property.id)
       .then(setWaitlistQueue)
+      .catch(() => undefined);
+  }, [accessToken, property]);
+
+  useEffect(() => {
+    if (!accessToken || !property || property.ownerId === undefined) return;
+    api
+      .listHqsInspections(accessToken, property.id)
+      .then((reqs) => setHqsInspection(reqs.find((r) => r.status !== 'CANCELLED') ?? null))
       .catch(() => undefined);
   }, [accessToken, property]);
 
@@ -262,6 +275,38 @@ export default function PropertyDetailPage() {
     } catch (err) {
       setBoostError(err instanceof Error ? err.message : 'Failed to start checkout');
       setBoostBusy(false);
+    }
+  }
+
+  async function purchaseHqsInspection() {
+    if (!accessToken || !property) return;
+    setHqsBusy(true);
+    setHqsError(null);
+    try {
+      const created = await api.createHqsInspection(accessToken, property.id);
+      if (created.status === 'AWAITING_PAYMENT' && created.checkoutUrl) {
+        window.location.href = created.checkoutUrl;
+      } else {
+        setHqsInspection(created);
+      }
+    } catch (err) {
+      setHqsError(err instanceof Error ? err.message : 'Failed to start checkout');
+      setHqsBusy(false);
+    }
+  }
+
+  async function requestHqsWalkthrough() {
+    if (!accessToken || !hqsInspection) return;
+    setHqsBusy(true);
+    setHqsError(null);
+    try {
+      const updated = await api.requestHqsInspection(accessToken, hqsInspection.id, hqsDateNote || undefined);
+      setHqsInspection(updated);
+      setHqsDateNote('');
+    } catch (err) {
+      setHqsError(err instanceof Error ? err.message : 'Failed to request the walkthrough');
+    } finally {
+      setHqsBusy(false);
     }
   }
 
@@ -904,6 +949,63 @@ export default function PropertyDetailPage() {
                 {boostError && <p style={{ color: theme.danger, fontSize: 13, marginTop: 8 }}>{boostError}</p>}
               </>
             )}
+          </div>
+        )}
+
+        {canManage && (
+          <div style={{ marginTop: 16, background: theme.card, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>HQS Pre-Inspection Package</h3>
+            {!hqsInspection && (
+              <>
+                <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 8, marginBottom: 12 }}>
+                  We handle the RTA paperwork and schedule a professional walkthrough so this property passes its HUD
+                  inspection on the first attempt.
+                </p>
+                <button
+                  onClick={purchaseHqsInspection}
+                  disabled={hqsBusy}
+                  style={{ padding: '10px 16px', borderRadius: 8, border: 'none', background: theme.primary, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                >
+                  {hqsBusy ? 'Starting checkout...' : 'Request HQS pre-inspection ($199)'}
+                </button>
+              </>
+            )}
+            {hqsInspection?.status === 'AWAITING_PAYMENT' && (
+              <a
+                href={hqsInspection.checkoutUrl ?? '#'}
+                style={{ display: 'inline-block', marginTop: 8, padding: '10px 16px', borderRadius: 8, background: theme.primary, color: 'white', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}
+              >
+                Pay ${(hqsInspection.feeCents / 100).toFixed(2)}
+              </a>
+            )}
+            {hqsInspection?.status === 'PAID' && (
+              <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                <p style={{ fontSize: 13, color: theme.textMuted, margin: 0 }}>
+                  Fee paid — let us know your preferred date/time for the walkthrough.
+                </p>
+                <input
+                  type="text"
+                  placeholder="e.g. Weekday mornings"
+                  value={hqsDateNote}
+                  onChange={(e) => setHqsDateNote(e.target.value)}
+                  style={{ padding: 8, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 13 }}
+                />
+                <button
+                  onClick={requestHqsWalkthrough}
+                  disabled={hqsBusy}
+                  style={{ padding: '10px 16px', borderRadius: 8, border: 'none', background: theme.primary, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', width: 'fit-content' }}
+                >
+                  {hqsBusy ? 'Sending...' : 'Request walkthrough'}
+                </button>
+              </div>
+            )}
+            {hqsInspection?.status === 'REQUESTED' && (
+              <p style={{ fontSize: 13, color: theme.primaryDark, marginTop: 8, marginBottom: 0, fontWeight: 600 }}>
+                Walkthrough requested{hqsInspection.preferredDateNote ? ` — "${hqsInspection.preferredDateNote}"` : ''}. Our
+                inspections team will follow up to confirm a time.
+              </p>
+            )}
+            {hqsError && <p style={{ color: theme.danger, fontSize: 13, marginTop: 8 }}>{hqsError}</p>}
           </div>
         )}
 
