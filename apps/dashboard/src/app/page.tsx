@@ -80,11 +80,12 @@ export default function HomePage() {
         gap: 6,
       }}
     >
-      <h1 style={{ fontSize: 28, fontWeight: 800, color: theme.primary, letterSpacing: '-0.02em', margin: 0 }}>
-        Affordable Home Match
+      <h1 style={{ fontSize: 26, fontWeight: 800, color: theme.primary, letterSpacing: '-0.02em', margin: 0, maxWidth: 380 }}>
+        Connecting HUD, Voucher &amp; Second-Chance Renters with Landlords Nationwide
       </h1>
-      <p style={{ color: theme.textMuted, fontSize: 14, margin: 0, maxWidth: 320 }}>
-        Matching Qualified Tenants with Affordable Homes Nationwide
+      <p style={{ color: theme.textMuted, fontSize: 14, margin: 0, maxWidth: 340 }}>
+        Section 8 housing, housing choice voucher rentals, and second-chance apartments — matched with landlords
+        who accept them, nationwide.
       </p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginTop: 14 }}>
         <Link href="/register" style={pillStyle('solid')}>

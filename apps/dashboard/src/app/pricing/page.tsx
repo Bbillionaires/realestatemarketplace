@@ -79,7 +79,9 @@ export default function PricingPage() {
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 24px 60px' }}>
         <h1 style={{ fontSize: 26, color: theme.text, marginBottom: 6, letterSpacing: '-0.01em' }}>Plans & Pricing</h1>
         <p style={{ color: theme.textMuted, fontSize: 15, marginTop: 0, marginBottom: 8, maxWidth: 640 }}>
-          Search is always free for tenants — these plans are for landlords who want extra support or visibility.
+          Search is always free for tenants — these plans are for landlords who want extra support or visibility,
+          whether you're running a guaranteed rent program on a single unit or managing a portfolio of Section 8
+          properties.
         </p>
 
         {isLandlord && subscription && (

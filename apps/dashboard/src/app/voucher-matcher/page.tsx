@@ -53,10 +53,11 @@ export default function VoucherMatcherPage() {
     <main style={{ minHeight: '100vh', background: theme.bg }}>
       <NavBar />
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: 24 }}>
-        <h1 style={{ fontSize: 22, color: theme.text, marginBottom: 4 }}>Voucher Value Matcher</h1>
+        <h1 style={{ fontSize: 22, color: theme.text, marginBottom: 4 }}>Housing Choice Voucher Rentals &amp; Value Matcher</h1>
         <p style={{ color: theme.textMuted, fontSize: 14, marginTop: 0, marginBottom: 20, maxWidth: 640 }}>
           Enter your voucher&apos;s bedroom allowance and a zip code to see the current HUD payment standard and
-          every Section 8 landlord on Affordable Home Match with a home priced at or below it. No account needed.
+          every HUD-approved apartment and housing choice voucher rental on Affordable Home Match priced at or below
+          it. No account needed.
         </p>
 
         <form

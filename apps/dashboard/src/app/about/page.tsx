@@ -12,6 +12,12 @@ export default function AboutPage() {
         sites — rent-to-own, lease-to-own, seller financing, work-for-rent exchanges, and tenant lease swaps — so
         renters and owners can find arrangements that work for their situation.
       </p>
+      <p>
+        Affordable Home Match is focused on a niche other rental sites treat as an afterthought: Section 8 housing,
+        housing choice voucher rentals, and second-chance apartments. Renters can search for HUD-approved
+        apartments or no-credit-check listings directly, and landlords can list affordable housing rentals and
+        connect with guaranteed rent programs built around housing vouchers.
+      </p>
       <p>Every conversation is monitored for scam patterns and off-platform contact requests to help keep both sides safe.</p>
     </InfoPage>
   );

@@ -29,6 +29,13 @@ export default function RenterBenefitsPage() {
           so you can search with confidence.
         </p>
       </InfoSection>
+      <InfoSection heading="Section 8, vouchers, and second-chance housing in one place">
+        <p>
+          Whether you're searching for Section 8 housing near you, landlords that accept housing vouchers, or
+          second-chance apartments open to no-credit-check and eviction-friendly applications, every listing on
+          Affordable Home Match tells you upfront whether it's a fit — no more guessing before you apply.
+        </p>
+      </InfoSection>
     </InfoPage>
   );
 }

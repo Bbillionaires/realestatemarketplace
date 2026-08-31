@@ -34,6 +34,20 @@ export default function OwnerGuidePage() {
       <InfoSection heading="6. Delegate to a manager">
         <p>Assign a property manager to help run day-to-day communication on a listing, and revoke that access any time.</p>
       </InfoSection>
+      <InfoSection heading="7. Become a Section 8 landlord">
+        <p>
+          Learning how to list property for Section 8 starts with flagging your listing as accepting housing
+          vouchers, which puts it in front of renters actively searching for HUD-approved apartments. Many owners
+          find that guaranteed rent programs for landlords make accepting housing vouchers a reliable source of
+          monthly income — weigh the pros and cons of accepting housing vouchers for your situation before deciding.
+        </p>
+        <p>
+          If your unit needs to meet HUD Housing Quality Standards before a housing authority will approve it, use
+          the HQS pre-inspection service from your property page: it walks through the same HUD Housing Quality
+          Standards inspection checklist an official inspector uses, so you can fix issues ahead of time instead of
+          failing the real inspection.
+        </p>
+      </InfoSection>
     </InfoPage>
   );
 }

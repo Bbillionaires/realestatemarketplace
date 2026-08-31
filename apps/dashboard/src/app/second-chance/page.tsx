@@ -32,11 +32,11 @@ export default function SecondChancePage() {
     <main style={{ minHeight: '100vh', background: theme.bg }}>
       <NavBar />
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: 24 }}>
-        <h1 style={{ fontSize: 22, marginBottom: 4, color: theme.text }}>Second-Chance Friendly Housing</h1>
+        <h1 style={{ fontSize: 22, marginBottom: 4, color: theme.text }}>Second-Chance Apartments &amp; Eviction-Friendly Rentals</h1>
         <p style={{ color: theme.textMuted, marginTop: 0, marginBottom: 20, fontSize: 14, maxWidth: 640 }}>
-          Listings below are marked by their landlord as open to applicants with a prior eviction, credit issue, or
-          justice-involvement. Message the landlord through the platform to confirm current screening criteria before
-          applying.
+          Browse second-chance apartments from private landlords open to applicants with a prior eviction, credit
+          issue, or justice-involvement — including no-credit-check and bad-credit rental listings. Message the
+          landlord through the platform to confirm current screening criteria before applying.
         </p>
 
         {loading && <p style={{ color: theme.textMuted }}>Loading...</p>}
