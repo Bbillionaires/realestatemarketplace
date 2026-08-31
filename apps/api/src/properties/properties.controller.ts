@@ -65,6 +65,23 @@ export class PropertiesController {
     return this.propertiesService.getFeed(bounded);
   }
 
+  // Public — same reasoning as GET /feed: a logged-out visitor searching
+  // Section 8, second-chance, or room-rental listings gets a capped, real
+  // preview instead of a login wall before seeing anything.
+  @Get('preview')
+  @Public()
+  getPreview(
+    @Query('section8') section8?: string,
+    @Query('secondChance') secondChance?: string,
+    @Query('roomRentals') roomRentals?: string,
+  ) {
+    return this.propertiesService.getPublicPreview({
+      acceptsSection8Vouchers: section8 === 'true' ? true : undefined,
+      secondChanceFriendly: secondChance === 'true' ? true : undefined,
+      roomRentals: roomRentals === 'true' ? true : undefined,
+    });
+  }
+
   @Get('rent-estimate')
   rentEstimate(@Query() query: RentEstimateQueryDto) {
     return this.propertiesService.estimateRent(query);

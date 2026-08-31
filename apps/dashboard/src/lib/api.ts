@@ -561,6 +561,17 @@ export const api = {
     return request<PropertySummary[]>(`/properties${qs ? `?${qs}` : ''}`, {}, accessToken);
   },
   getProperty: (accessToken: string, id: string) => request<PropertySummary>(`/properties/${id}`, {}, accessToken),
+  // Public — no accessToken needed, same reasoning as getPropertyFeed: a
+  // logged-out visitor browsing Section 8, second-chance, or room-rental
+  // listings gets a capped, real preview instead of a login wall.
+  getPropertyPreview: (filters: { section8?: boolean; secondChance?: boolean; roomRentals?: boolean } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.section8) params.set('section8', 'true');
+    if (filters.secondChance) params.set('secondChance', 'true');
+    if (filters.roomRentals) params.set('roomRentals', 'true');
+    const qs = params.toString();
+    return request<{ total: number; properties: PropertySummary[] }>(`/properties/preview${qs ? `?${qs}` : ''}`);
+  },
   // Public — no accessToken needed. The home page feed and its view-count
   // ping are a logged-out visitor's first touch with the platform.
   getPropertyFeed: (take = 12) => request<PropertySummary[]>(`/properties/feed?take=${take}`),

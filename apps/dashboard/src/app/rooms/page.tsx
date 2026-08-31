@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { api, PropertySummary } from '../../lib/api';
 import { useAuth } from '../../lib/auth-context';
 import { theme } from '../../lib/theme';
@@ -10,23 +10,35 @@ import { NavBar } from '../../components/NavBar';
 
 export default function RoomsPage() {
   const { accessToken, isLoading } = useAuth();
-  const router = useRouter();
   const [properties, setProperties] = useState<PropertySummary[]>([]);
+  const [previewTotal, setPreviewTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (isLoading) return;
-    if (!accessToken) {
-      router.push('/login');
-      return;
+    if (accessToken) {
+      api
+        .listProperties(accessToken, { roomRentals: true })
+        .then((props) => {
+          setProperties(props);
+          setPreviewTotal(null);
+        })
+        .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load properties'))
+        .finally(() => setLoading(false));
+    } else {
+      // Logged-out visitor: a capped, real preview instead of a login wall
+      // — enough for the page to be worth searching for and indexing.
+      api
+        .getPropertyPreview({ roomRentals: true })
+        .then((res) => {
+          setProperties(res.properties);
+          setPreviewTotal(res.total);
+        })
+        .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load properties'))
+        .finally(() => setLoading(false));
     }
-    api
-      .listProperties(accessToken, { roomRentals: true })
-      .then(setProperties)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load properties'))
-      .finally(() => setLoading(false));
-  }, [accessToken, isLoading, router]);
+  }, [accessToken, isLoading]);
 
   return (
     <main style={{ minHeight: '100vh', background: theme.bg }}>
@@ -37,6 +49,26 @@ export default function RoomsPage() {
           Listings below have at least one room or bed rented individually rather than the whole property as one
           unit. Open a listing to see each room&apos;s own rent and availability.
         </p>
+
+        {previewTotal !== null && previewTotal > properties.length && (
+          <div
+            style={{
+              background: theme.primaryLight,
+              border: `1px solid ${theme.border}`,
+              borderRadius: theme.radius,
+              padding: '10px 14px',
+              marginBottom: 16,
+              fontSize: 13,
+              color: theme.text,
+            }}
+          >
+            Showing {properties.length} of {previewTotal} room &amp; co-living listings.{' '}
+            <Link href="/register" style={{ color: theme.primary, fontWeight: 700 }}>
+              Sign up free
+            </Link>{' '}
+            to see them all.
+          </div>
+        )}
 
         {loading && <p style={{ color: theme.textMuted }}>Loading...</p>}
         {error && <p style={{ color: theme.danger }}>{error}</p>}

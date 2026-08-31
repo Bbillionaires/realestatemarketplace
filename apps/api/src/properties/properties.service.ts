@@ -417,6 +417,41 @@ export class PropertiesService {
     return keyed.slice(0, take).map(({ property }) => PropertyResponseDto.from(property, { includeManagement: false }));
   }
 
+  /**
+   * Public, capped preview for a logged-out visitor browsing a filtered
+   * category page (Section 8, second-chance, room rentals) — enough real
+   * results for the page to be worth indexing, without handing the whole
+   * matching inventory to someone who hasn't signed up.
+   */
+  async getPublicPreview(filters: {
+    acceptsSection8Vouchers?: boolean;
+    secondChanceFriendly?: boolean;
+    roomRentals?: boolean;
+  }): Promise<{ total: number; properties: PropertyResponseDto[] }> {
+    const candidates = await this.prisma.property.findMany({
+      where: {
+        isActive: true,
+        acceptsSection8Vouchers: filters.acceptsSection8Vouchers === true ? true : undefined,
+        secondChanceFriendly: filters.secondChanceFriendly === true ? true : undefined,
+        units:
+          filters.roomRentals === true
+            ? { some: { listingType: { in: ['PRIVATE_ROOM', 'SHARED_ROOM'] as UnitListingType[] } } }
+            : undefined,
+      },
+      include: PROPERTY_INCLUDE,
+      orderBy: [{ boostedUntil: { sort: 'desc' as const, nulls: 'last' as const } }, { createdAt: 'desc' as const }],
+    });
+
+    const total = candidates.length;
+    // 10-20% of matching listings, at least 1 if any exist at all.
+    const previewCount = total === 0 ? 0 : Math.min(total, Math.max(1, Math.ceil(total * 0.15)));
+
+    return {
+      total,
+      properties: candidates.slice(0, previewCount).map((property) => PropertyResponseDto.from(property, { includeManagement: false })),
+    };
+  }
+
   /** Fires when a logged-out (or logged-in) visitor flips a home-feed card to its details side. */
   async recordView(propertyId: string): Promise<void> {
     await this.prisma.property.updateMany({
