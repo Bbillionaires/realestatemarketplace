@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HqsInspectionStatus, PropertyType, Role, UnitListingType } from '@prisma/client';
+import { HqsInspectionStatus, Prisma, PropertyType, Role, UnitListingType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { AppConfig } from '../config/configuration';
@@ -45,6 +45,54 @@ export interface VoucherMatcherResult {
   matches: PropertyResponseDto[];
 }
 
+export interface PropertySearchFilters {
+  city?: string;
+  state?: string;
+  propertyType?: string;
+  acceptsSection8Vouchers?: boolean;
+  secondChanceFriendly?: boolean;
+  roomRentals?: boolean;
+  brokenLeaseOk?: boolean;
+  cosignerAccepted?: boolean;
+  noCreditCheckIncomeOnly?: boolean;
+  /** Match listings whose stated eviction-age tolerance is at or below this many years. */
+  maxEvictionYears?: number;
+  /** At least one utility is included, per the landlord's utilitiesIncluded checklist. */
+  utilitiesIncluded?: boolean;
+  landlordPaysWater?: boolean;
+  landlordPaysElectricity?: boolean;
+  /** Rent-to-own, lease-to-own, or seller financing — any path to ownership. */
+  rentToOwn?: boolean;
+}
+
+/** Shared by findAll() and getPublicPreview() so both search the same criteria. */
+function buildPropertySearchWhere(filters: PropertySearchFilters): Prisma.PropertyWhereInput {
+  const typeFilter =
+    filters.propertyType && PROPERTY_TYPE_VALUES.includes(filters.propertyType) ? (filters.propertyType as PropertyType) : undefined;
+
+  return {
+    city: filters.city ?? undefined,
+    state: filters.state ?? undefined,
+    propertyType: typeFilter,
+    acceptsSection8Vouchers: filters.acceptsSection8Vouchers === true ? true : undefined,
+    secondChanceFriendly: filters.secondChanceFriendly === true ? true : undefined,
+    brokenLeaseOk: filters.brokenLeaseOk === true ? true : undefined,
+    cosignerAccepted: filters.cosignerAccepted === true ? true : undefined,
+    noCreditCheckIncomeOnly: filters.noCreditCheckIncomeOnly === true ? true : undefined,
+    evictionAgeToleranceYears: filters.maxEvictionYears !== undefined ? { lte: filters.maxEvictionYears } : undefined,
+    utilitiesIncluded: filters.utilitiesIncluded === true ? { isEmpty: false } : undefined,
+    landlordPaysWater: filters.landlordPaysWater === true ? true : undefined,
+    landlordPaysElectricity: filters.landlordPaysElectricity === true ? true : undefined,
+    OR:
+      filters.rentToOwn === true
+        ? [{ rentToOwnAvailable: true }, { leaseToOwnAvailable: true }, { sellerFinancingAvailable: true }]
+        : undefined,
+    // A property "has room rentals" when at least one of its units is
+    // rented room-by-room rather than as the entire place.
+    units: filters.roomRentals === true ? { some: { listingType: { in: ['PRIVATE_ROOM', 'SHARED_ROOM'] as UnitListingType[] } } } : undefined,
+  };
+}
+
 const STAFF_ROLES: Role[] = [Role.STAFF_MODERATOR, Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR];
 const PROPERTY_INCLUDE = {
   owner: { include: { profile: true } },
@@ -86,29 +134,10 @@ export class PropertiesService {
 
   async findAll(
     actor: AuthenticatedUser | null,
-    filters: {
-      city?: string;
-      state?: string;
-      propertyType?: string;
-      acceptsSection8Vouchers?: boolean;
-      secondChanceFriendly?: boolean;
-      roomRentals?: boolean;
-      skip?: number;
-      take?: number;
-    },
+    filters: PropertySearchFilters & { skip?: number; take?: number },
   ): Promise<PropertyResponseDto[]> {
-    const { city, state, propertyType, acceptsSection8Vouchers, secondChanceFriendly, roomRentals, skip = 0, take = 50 } = filters;
-    const typeFilter = propertyType && PROPERTY_TYPE_VALUES.includes(propertyType) ? (propertyType as PropertyType) : undefined;
-    const commonFilters = {
-      city: city ?? undefined,
-      state: state ?? undefined,
-      propertyType: typeFilter,
-      acceptsSection8Vouchers: acceptsSection8Vouchers === true ? true : undefined,
-      secondChanceFriendly: secondChanceFriendly === true ? true : undefined,
-      // A property "has room rentals" when at least one of its units is
-      // rented room-by-room rather than as the entire place.
-      units: roomRentals === true ? { some: { listingType: { in: ['PRIVATE_ROOM', 'SHARED_ROOM'] as UnitListingType[] } } } : undefined,
-    };
+    const { skip = 0, take = 50 } = filters;
+    const commonFilters = buildPropertySearchWhere(filters);
 
     // A Featured Listing Boost surfaces a property first: non-null
     // boostedUntil sorts ahead of never-boosted (null) listings, most
@@ -138,13 +167,15 @@ export class PropertiesService {
       return properties.map((p) => PropertyResponseDto.from(p, { includeManagement: true }));
     }
 
-    // Landlord or property manager: only what they own or manage.
+    // Landlord or property manager: only what they own or manage. Ownership
+    // scoping goes in its own AND/OR rather than a top-level `OR` key, since
+    // commonFilters may already set `OR` (the rentToOwn filter) — a second
+    // top-level `OR` here would silently overwrite it instead of combining.
     const properties = await this.prisma.property.findMany({
       where: {
         ...commonFilters,
-        OR: [
-          { ownerId: actor.id },
-          { managerAssignments: { some: { userId: actor.id, revokedAt: null } } },
+        AND: [
+          { OR: [{ ownerId: actor.id }, { managerAssignments: { some: { userId: actor.id, revokedAt: null } } }] },
         ],
       },
       include: PROPERTY_INCLUDE,
@@ -428,21 +459,9 @@ export class PropertiesService {
    * results for the page to be worth indexing, without handing the whole
    * matching inventory to someone who hasn't signed up.
    */
-  async getPublicPreview(filters: {
-    acceptsSection8Vouchers?: boolean;
-    secondChanceFriendly?: boolean;
-    roomRentals?: boolean;
-  }): Promise<{ total: number; properties: PropertyResponseDto[] }> {
+  async getPublicPreview(filters: PropertySearchFilters): Promise<{ total: number; properties: PropertyResponseDto[] }> {
     const candidates = await this.prisma.property.findMany({
-      where: {
-        isActive: true,
-        acceptsSection8Vouchers: filters.acceptsSection8Vouchers === true ? true : undefined,
-        secondChanceFriendly: filters.secondChanceFriendly === true ? true : undefined,
-        units:
-          filters.roomRentals === true
-            ? { some: { listingType: { in: ['PRIVATE_ROOM', 'SHARED_ROOM'] as UnitListingType[] } } }
-            : undefined,
-      },
+      where: { isActive: true, ...buildPropertySearchWhere(filters) },
       include: PROPERTY_INCLUDE,
       orderBy: [{ boostedUntil: { sort: 'desc' as const, nulls: 'last' as const } }, { createdAt: 'desc' as const }],
     });

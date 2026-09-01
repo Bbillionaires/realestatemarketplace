@@ -9,6 +9,9 @@ import { EmailProvider } from '../email/interfaces/email-provider.interface';
 import { PAYMENT_PROVIDER } from '../payments/payments.constants';
 import { PaymentProvider } from '../payments/interfaces/payment-provider.interface';
 import { TenantPacketResponseDto } from './dto/tenant-packet-response.dto';
+import { TenantPacketReferenceDto } from './dto/submit-tenant-packet.dto';
+
+const PACKET_INCLUDE = { referenceContacts: true } as const;
 
 const STAFF_ROLES: Role[] = [Role.STAFF_MODERATOR, Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR];
 const PAID_STATUSES: TenantPacketStatus[] = [TenantPacketStatus.PAID, TenantPacketStatus.SUBMITTED];
@@ -45,7 +48,7 @@ export class TenantPacketsService {
 
   async getOrCreateMine(actor: AuthenticatedUser): Promise<TenantPacketResponseDto> {
     this.assertTenant(actor);
-    const packet = await this.prisma.tenantPacket.findUnique({ where: { tenantId: actor.id } });
+    const packet = await this.prisma.tenantPacket.findUnique({ where: { tenantId: actor.id }, include: PACKET_INCLUDE });
     return packet ? TenantPacketResponseDto.from(packet) : TenantPacketResponseDto.notStarted(this.feeCents());
   }
 
@@ -88,8 +91,13 @@ export class TenantPacketsService {
 
   async submit(
     actor: AuthenticatedUser,
-    backgroundExplanation: string | undefined,
-    references: string | undefined,
+    fields: {
+      backgroundExplanation?: string;
+      references?: string;
+      monthlyIncomeCents?: number;
+      employerName?: string;
+      referenceContacts?: TenantPacketReferenceDto[];
+    },
     file: UploadedIncomeProof | undefined,
   ): Promise<TenantPacketResponseDto> {
     this.assertTenant(actor);
@@ -98,19 +106,41 @@ export class TenantPacketsService {
       throw new BadRequestException('The Fast-Track packet fee must be paid before filling it out');
     }
 
-    const updated = await this.prisma.tenantPacket.update({
-      where: { id: packet.id },
-      data: {
-        status: TenantPacketStatus.SUBMITTED,
-        backgroundExplanation: backgroundExplanation ?? packet.backgroundExplanation,
-        references: references ?? packet.references,
-        ...(file
-          ? { incomeProofFileName: file.originalname, incomeProofMimeType: file.mimetype, incomeProofFile: file.buffer }
-          : {}),
-        submittedAt: new Date(),
-      },
-    });
-    return TenantPacketResponseDto.from(updated);
+    // referenceContacts is full-replace-on-submit (delete + recreate) rather
+    // than diffed — low-volume personal data attached to one packet, so this
+    // is simpler and safer than reconciling individual rows.
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.tenantPacket.update({
+        where: { id: packet.id },
+        data: {
+          status: TenantPacketStatus.SUBMITTED,
+          backgroundExplanation: fields.backgroundExplanation ?? packet.backgroundExplanation,
+          references: fields.references ?? packet.references,
+          monthlyIncomeCents: fields.monthlyIncomeCents ?? packet.monthlyIncomeCents,
+          employerName: fields.employerName ?? packet.employerName,
+          ...(file
+            ? { incomeProofFileName: file.originalname, incomeProofMimeType: file.mimetype, incomeProofFile: file.buffer }
+            : {}),
+          submittedAt: new Date(),
+        },
+        include: PACKET_INCLUDE,
+      }),
+      ...(fields.referenceContacts
+        ? [
+            this.prisma.tenantPacketReference.deleteMany({ where: { tenantPacketId: packet.id } }),
+            this.prisma.tenantPacketReference.createMany({
+              data: fields.referenceContacts.map((r) => ({ tenantPacketId: packet.id, ...r })),
+            }),
+          ]
+        : []),
+    ]);
+
+    // Re-fetch when references changed, since the update above ran before the
+    // delete+recreate and its included referenceContacts would be stale.
+    const final = fields.referenceContacts
+      ? await this.prisma.tenantPacket.findUniqueOrThrow({ where: { id: packet.id }, include: PACKET_INCLUDE })
+      : updated;
+    return TenantPacketResponseDto.from(final);
   }
 
   /** Emails the tenant's Fast-Track packet to the landlord-side contact on one conversation. Reusable — the tenant can share the same packet into as many conversations as they want. */
@@ -127,7 +157,7 @@ export class TenantPacketsService {
       throw new ForbiddenException('Only the tenant on this conversation can share their packet');
     }
 
-    const packet = await this.prisma.tenantPacket.findUnique({ where: { tenantId: actor.id } });
+    const packet = await this.prisma.tenantPacket.findUnique({ where: { tenantId: actor.id }, include: PACKET_INCLUDE });
     if (!packet || packet.status !== TenantPacketStatus.SUBMITTED) {
       throw new BadRequestException('Fill out and submit your Fast-Track packet before sharing it');
     }
@@ -136,8 +166,12 @@ export class TenantPacketsService {
     }
 
     const bodyLines = [
+      `Monthly income: ${packet.monthlyIncomeCents != null ? `$${(packet.monthlyIncomeCents / 100).toFixed(2)}` : '(not provided)'}`,
+      `Employer: ${packet.employerName ?? '(not provided)'}`,
       `Background: ${packet.backgroundExplanation ?? '(not provided)'}`,
-      `References: ${packet.references ?? '(not provided)'}`,
+      packet.referenceContacts.length > 0
+        ? `References:\n${packet.referenceContacts.map((r) => `  - ${r.name}${r.relationship ? ` (${r.relationship})` : ''}${r.phone ? ` · ${r.phone}` : ''}${r.email ? ` · ${r.email}` : ''}`).join('\n')}`
+        : `References: ${packet.references ?? '(not provided)'}`,
     ];
     await this.emailProvider.sendEmail({
       to: conversation.landlord.email,

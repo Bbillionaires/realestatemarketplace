@@ -96,6 +96,10 @@ export class PropertyResponseDto {
   workForRentAvailable!: boolean;
   tenantSwapAllowed!: boolean;
   secondChanceFriendly!: boolean;
+  brokenLeaseOk!: boolean;
+  cosignerAccepted!: boolean;
+  noCreditCheckIncomeOnly!: boolean;
+  evictionAgeToleranceYears!: number | null;
   boostedUntil!: Date | null;
   landlordDisplayName!: string;
   units!: UnitResponseDto[];
@@ -148,6 +152,10 @@ export class PropertyResponseDto {
       workForRentAvailable: boolean;
       tenantSwapAllowed: boolean;
       secondChanceFriendly: boolean;
+      brokenLeaseOk: boolean;
+      cosignerAccepted: boolean;
+      noCreditCheckIncomeOnly: boolean;
+      evictionAgeToleranceYears: number | null;
       boostedUntil: Date | null;
       boostCheckoutUrl: string | null;
       viewCount: number;
@@ -204,6 +212,10 @@ export class PropertyResponseDto {
     dto.workForRentAvailable = property.workForRentAvailable;
     dto.tenantSwapAllowed = property.tenantSwapAllowed;
     dto.secondChanceFriendly = property.secondChanceFriendly;
+    dto.brokenLeaseOk = property.brokenLeaseOk;
+    dto.cosignerAccepted = property.cosignerAccepted;
+    dto.noCreditCheckIncomeOnly = property.noCreditCheckIncomeOnly;
+    dto.evictionAgeToleranceYears = property.evictionAgeToleranceYears;
     dto.boostedUntil = property.boostedUntil;
     dto.landlordDisplayName = property.owner?.profile?.displayName ?? 'Property Management';
     dto.units = (property.units ?? []).map((u) => UnitResponseDto.from(u));

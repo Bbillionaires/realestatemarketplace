@@ -31,8 +31,13 @@ export class TenantPacketsController {
   ) {
     return this.tenantPacketsService.submit(
       user,
-      dto.backgroundExplanation,
-      dto.references,
+      {
+        backgroundExplanation: dto.backgroundExplanation,
+        references: dto.references,
+        monthlyIncomeCents: dto.monthlyIncomeCents,
+        employerName: dto.employerName,
+        referenceContacts: dto.referenceContacts,
+      },
       file ? { originalname: file.originalname, mimetype: file.mimetype, buffer: file.buffer } : undefined,
     );
   }

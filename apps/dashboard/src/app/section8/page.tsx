@@ -15,12 +15,17 @@ export default function Section8Page() {
   const [previewTotal, setPreviewTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [utilitiesIncluded, setUtilitiesIncluded] = useState(false);
+  const [landlordPaysWater, setLandlordPaysWater] = useState(false);
+  const [landlordPaysElectricity, setLandlordPaysElectricity] = useState(false);
 
   useEffect(() => {
     if (isLoading) return;
+    setLoading(true);
+    const filters = { section8: true, utilitiesIncluded, landlordPaysWater, landlordPaysElectricity };
     if (accessToken) {
       api
-        .listProperties(accessToken, { section8: true })
+        .listProperties(accessToken, filters)
         .then((props) => {
           setProperties(props);
           setPreviewTotal(null);
@@ -31,7 +36,7 @@ export default function Section8Page() {
       // Logged-out visitor: a capped, real preview instead of a login wall
       // — enough for the page to be worth searching for and indexing.
       api
-        .getPropertyPreview({ section8: true })
+        .getPropertyPreview(filters)
         .then((res) => {
           setProperties(res.properties);
           setPreviewTotal(res.total);
@@ -39,7 +44,7 @@ export default function Section8Page() {
         .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load properties'))
         .finally(() => setLoading(false));
     }
-  }, [accessToken, isLoading]);
+  }, [accessToken, isLoading, utilitiesIncluded, landlordPaysWater, landlordPaysElectricity]);
 
   return (
     <main style={{ minHeight: '100vh', background: theme.bg }}>
@@ -134,6 +139,25 @@ export default function Section8Page() {
           Look for the "Section 8 OK" badge for guaranteed voucher acceptance and the "HQS Pre-Inspected" badge for
           landlords who've already passed a walkthrough.
         </p>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16, fontSize: 13, color: theme.text }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={utilitiesIncluded} onChange={(e) => setUtilitiesIncluded(e.target.checked)} />
+            Utilities included
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={landlordPaysWater} onChange={(e) => setLandlordPaysWater(e.target.checked)} />
+            Landlord pays water
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={landlordPaysElectricity}
+              onChange={(e) => setLandlordPaysElectricity(e.target.checked)}
+            />
+            Landlord pays electricity
+          </label>
+        </div>
 
         {loading && <p style={{ color: theme.textMuted }}>Loading...</p>}
         {error && <p style={{ color: theme.danger }}>{error}</p>}

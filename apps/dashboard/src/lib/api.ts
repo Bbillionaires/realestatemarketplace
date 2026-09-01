@@ -111,6 +111,10 @@ export interface PropertySummary {
   workForRentAvailable: boolean;
   tenantSwapAllowed: boolean;
   secondChanceFriendly: boolean;
+  brokenLeaseOk: boolean;
+  cosignerAccepted: boolean;
+  noCreditCheckIncomeOnly: boolean;
+  evictionAgeToleranceYears: number | null;
   hasRoomRentals: boolean;
   hqsPreInspected: boolean;
   boostedUntil: string | null;
@@ -118,6 +122,37 @@ export interface PropertySummary {
   ownerId?: string;
   managerIds?: string[];
   boostCheckoutUrl?: string | null;
+}
+
+export interface PropertySearchFilters {
+  section8?: boolean;
+  secondChance?: boolean;
+  roomRentals?: boolean;
+  brokenLeaseOk?: boolean;
+  cosignerAccepted?: boolean;
+  noCreditCheckIncomeOnly?: boolean;
+  maxEvictionYears?: number;
+  utilitiesIncluded?: boolean;
+  landlordPaysWater?: boolean;
+  landlordPaysElectricity?: boolean;
+  rentToOwn?: boolean;
+}
+
+/** Shared by listProperties/getPropertyPreview so both build the same query string. */
+function searchFiltersToParams(filters: PropertySearchFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.section8) params.set('section8', 'true');
+  if (filters.secondChance) params.set('secondChance', 'true');
+  if (filters.roomRentals) params.set('roomRentals', 'true');
+  if (filters.brokenLeaseOk) params.set('brokenLeaseOk', 'true');
+  if (filters.cosignerAccepted) params.set('cosignerAccepted', 'true');
+  if (filters.noCreditCheckIncomeOnly) params.set('noCreditCheckIncomeOnly', 'true');
+  if (filters.maxEvictionYears !== undefined) params.set('maxEvictionYears', String(filters.maxEvictionYears));
+  if (filters.utilitiesIncluded) params.set('utilitiesIncluded', 'true');
+  if (filters.landlordPaysWater) params.set('landlordPaysWater', 'true');
+  if (filters.landlordPaysElectricity) params.set('landlordPaysElectricity', 'true');
+  if (filters.rentToOwn) params.set('rentToOwn', 'true');
+  return params;
 }
 
 export interface UpdatePropertyPayload {
@@ -139,6 +174,10 @@ export interface UpdatePropertyPayload {
   workForRentAvailable?: boolean;
   tenantSwapAllowed?: boolean;
   secondChanceFriendly?: boolean;
+  brokenLeaseOk?: boolean;
+  cosignerAccepted?: boolean;
+  noCreditCheckIncomeOnly?: boolean;
+  evictionAgeToleranceYears?: number;
 }
 
 export interface CreatePropertyPayload {
@@ -165,6 +204,10 @@ export interface CreatePropertyPayload {
   leaseToOwnAvailable?: boolean;
   sellerFinancingAvailable?: boolean;
   secondChanceFriendly?: boolean;
+  brokenLeaseOk?: boolean;
+  cosignerAccepted?: boolean;
+  noCreditCheckIncomeOnly?: boolean;
+  evictionAgeToleranceYears?: number;
 }
 
 export interface CreateUnitPayload {
@@ -508,6 +551,14 @@ export interface HqsInspectionSummary {
 
 export type TenantPacketStatus = 'NOT_STARTED' | 'AWAITING_PAYMENT' | 'PAID' | 'SUBMITTED';
 
+export interface TenantPacketReferenceContact {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  relationship: string | null;
+}
+
 export interface TenantPacketSummary {
   id: string | null;
   feeCents: number;
@@ -517,6 +568,9 @@ export interface TenantPacketSummary {
   incomeProofFileName: string | null;
   backgroundExplanation: string | null;
   references: string | null;
+  monthlyIncomeCents: number | null;
+  employerName: string | null;
+  referenceContacts: TenantPacketReferenceContact[];
   submittedAt: string | null;
 }
 
@@ -549,15 +603,9 @@ export const api = {
     requestsPropertyManagementHelp?: boolean;
   }) => request<TokenPair>('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
   me: (accessToken: string) => request<CurrentUser>('/users/me', {}, accessToken),
-  listProperties: (
-    accessToken: string,
-    filters: { type?: string; section8?: boolean; secondChance?: boolean; roomRentals?: boolean } = {},
-  ) => {
-    const params = new URLSearchParams();
+  listProperties: (accessToken: string, filters: PropertySearchFilters & { type?: string } = {}) => {
+    const params = searchFiltersToParams(filters);
     if (filters.type) params.set('type', filters.type);
-    if (filters.section8) params.set('section8', 'true');
-    if (filters.secondChance) params.set('secondChance', 'true');
-    if (filters.roomRentals) params.set('roomRentals', 'true');
     const qs = params.toString();
     return request<PropertySummary[]>(`/properties${qs ? `?${qs}` : ''}`, {}, accessToken);
   },
@@ -565,12 +613,8 @@ export const api = {
   // Public — no accessToken needed, same reasoning as getPropertyFeed: a
   // logged-out visitor browsing Section 8, second-chance, or room-rental
   // listings gets a capped, real preview instead of a login wall.
-  getPropertyPreview: (filters: { section8?: boolean; secondChance?: boolean; roomRentals?: boolean } = {}) => {
-    const params = new URLSearchParams();
-    if (filters.section8) params.set('section8', 'true');
-    if (filters.secondChance) params.set('secondChance', 'true');
-    if (filters.roomRentals) params.set('roomRentals', 'true');
-    const qs = params.toString();
+  getPropertyPreview: (filters: PropertySearchFilters = {}) => {
+    const qs = searchFiltersToParams(filters).toString();
     return request<{ total: number; properties: PropertySummary[] }>(`/properties/preview${qs ? `?${qs}` : ''}`);
   },
   // Public — no accessToken needed. The home page feed and its view-count
@@ -797,11 +841,21 @@ export const api = {
     request<TenantPacketSummary>('/tenant-packet/checkout', { method: 'POST' }, accessToken),
   submitTenantPacket: (
     accessToken: string,
-    payload: { backgroundExplanation?: string; references?: string; file?: File },
+    payload: {
+      backgroundExplanation?: string;
+      references?: string;
+      monthlyIncomeCents?: number;
+      employerName?: string;
+      referenceContacts?: { name: string; phone?: string; email?: string; relationship?: string }[];
+      file?: File;
+    },
   ) => {
     const formData = new FormData();
     if (payload.backgroundExplanation) formData.set('backgroundExplanation', payload.backgroundExplanation);
     if (payload.references) formData.set('references', payload.references);
+    if (payload.monthlyIncomeCents !== undefined) formData.set('monthlyIncomeCents', String(payload.monthlyIncomeCents));
+    if (payload.employerName) formData.set('employerName', payload.employerName);
+    if (payload.referenceContacts) formData.set('referenceContacts', JSON.stringify(payload.referenceContacts));
     if (payload.file) formData.set('file', payload.file);
     return requestMultipart<TenantPacketSummary>('/tenant-packet/submit', formData, accessToken);
   },

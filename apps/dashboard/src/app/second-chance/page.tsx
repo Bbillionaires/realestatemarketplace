@@ -15,12 +15,17 @@ export default function SecondChancePage() {
   const [previewTotal, setPreviewTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [brokenLeaseOk, setBrokenLeaseOk] = useState(false);
+  const [cosignerAccepted, setCosignerAccepted] = useState(false);
+  const [noCreditCheckIncomeOnly, setNoCreditCheckIncomeOnly] = useState(false);
 
   useEffect(() => {
     if (isLoading) return;
+    setLoading(true);
+    const filters = { secondChance: true, brokenLeaseOk, cosignerAccepted, noCreditCheckIncomeOnly };
     if (accessToken) {
       api
-        .listProperties(accessToken, { secondChance: true })
+        .listProperties(accessToken, filters)
         .then((props) => {
           setProperties(props);
           setPreviewTotal(null);
@@ -31,7 +36,7 @@ export default function SecondChancePage() {
       // Logged-out visitor: a capped, real preview instead of a login wall
       // — enough for the page to be worth searching for and indexing.
       api
-        .getPropertyPreview({ secondChance: true })
+        .getPropertyPreview(filters)
         .then((res) => {
           setProperties(res.properties);
           setPreviewTotal(res.total);
@@ -39,7 +44,7 @@ export default function SecondChancePage() {
         .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load properties'))
         .finally(() => setLoading(false));
     }
-  }, [accessToken, isLoading]);
+  }, [accessToken, isLoading, brokenLeaseOk, cosignerAccepted, noCreditCheckIncomeOnly]);
 
   return (
     <main style={{ minHeight: '100vh', background: theme.bg }}>
@@ -126,6 +131,25 @@ export default function SecondChancePage() {
           Listings below are marked by their landlord as open to applicants with a prior eviction, credit issue, or
           justice-involvement.
         </p>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16, fontSize: 13, color: theme.text }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={brokenLeaseOk} onChange={(e) => setBrokenLeaseOk(e.target.checked)} />
+            Broken lease OK
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={cosignerAccepted} onChange={(e) => setCosignerAccepted(e.target.checked)} />
+            Cosigner accepted
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={noCreditCheckIncomeOnly}
+              onChange={(e) => setNoCreditCheckIncomeOnly(e.target.checked)}
+            />
+            No credit check
+          </label>
+        </div>
 
         {loading && <p style={{ color: theme.textMuted }}>Loading...</p>}
         {error && <p style={{ color: theme.danger }}>{error}</p>}

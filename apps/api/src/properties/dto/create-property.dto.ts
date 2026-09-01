@@ -136,4 +136,26 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsBoolean()
   secondChanceFriendly?: boolean;
+
+  /** Landlord will consider an applicant with a broken lease or landlord debt. */
+  @IsOptional()
+  @IsBoolean()
+  brokenLeaseOk?: boolean;
+
+  /** Landlord accepts a cosigner/guarantor in place of stricter tenant qualification. */
+  @IsOptional()
+  @IsBoolean()
+  cosignerAccepted?: boolean;
+
+  /** Landlord does not run a credit check — proof of income is used instead. */
+  @IsOptional()
+  @IsBoolean()
+  noCreditCheckIncomeOnly?: boolean;
+
+  /** Landlord will accept an eviction older than this many years. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(50)
+  evictionAgeToleranceYears?: number;
 }

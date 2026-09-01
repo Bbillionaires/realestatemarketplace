@@ -3,7 +3,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuditLog } from '../common/decorators/audit-log.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
-import { PropertiesService } from './properties.service';
+import { PropertiesService, PropertySearchFilters } from './properties.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
@@ -14,6 +14,29 @@ import { AssignManagerDto } from './dto/assign-manager.dto';
 import { JoinWaitlistDto } from './dto/join-waitlist.dto';
 import { RentEstimateQueryDto } from './dto/rent-estimate-query.dto';
 import { VoucherMatcherQueryDto } from './dto/voucher-matcher-query.dto';
+
+/**
+ * Shared by GET /properties and GET /properties/preview so both parse the
+ * same short query-string keys the same way — every flag here follows the
+ * existing `=== 'true'` idiom (undefined, not false, when absent/not 'true',
+ * so PropertiesService only applies a filter when it was explicitly asked for).
+ */
+function parseSearchFilters(query: Record<string, string | undefined>): PropertySearchFilters {
+  const maxEvictionYears = query.maxEvictionYears ? parseInt(query.maxEvictionYears, 10) : undefined;
+  return {
+    acceptsSection8Vouchers: query.section8 === 'true' ? true : undefined,
+    secondChanceFriendly: query.secondChance === 'true' ? true : undefined,
+    roomRentals: query.roomRentals === 'true' ? true : undefined,
+    brokenLeaseOk: query.brokenLeaseOk === 'true' ? true : undefined,
+    cosignerAccepted: query.cosignerAccepted === 'true' ? true : undefined,
+    noCreditCheckIncomeOnly: query.noCreditCheckIncomeOnly === 'true' ? true : undefined,
+    maxEvictionYears: Number.isFinite(maxEvictionYears) ? maxEvictionYears : undefined,
+    utilitiesIncluded: query.utilitiesIncluded === 'true' ? true : undefined,
+    landlordPaysWater: query.landlordPaysWater === 'true' ? true : undefined,
+    landlordPaysElectricity: query.landlordPaysElectricity === 'true' ? true : undefined,
+    rentToOwn: query.rentToOwn === 'true' ? true : undefined,
+  };
+}
 
 @Controller('properties')
 export class PropertiesController {
@@ -31,19 +54,15 @@ export class PropertiesController {
     @Query('city') city?: string,
     @Query('state') state?: string,
     @Query('type') propertyType?: string,
-    @Query('section8') section8?: string,
-    @Query('secondChance') secondChance?: string,
-    @Query('roomRentals') roomRentals?: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
+    @Query() rawQuery?: Record<string, string>,
   ) {
     return this.propertiesService.findAll(user, {
       city,
       state,
       propertyType,
-      acceptsSection8Vouchers: section8 === 'true' ? true : undefined,
-      secondChanceFriendly: secondChance === 'true' ? true : undefined,
-      roomRentals: roomRentals === 'true' ? true : undefined,
+      ...parseSearchFilters(rawQuery ?? {}),
       skip: skip ? parseInt(skip, 10) : undefined,
       take: take ? parseInt(take, 10) : undefined,
     });
@@ -70,16 +89,8 @@ export class PropertiesController {
   // preview instead of a login wall before seeing anything.
   @Get('preview')
   @Public()
-  getPreview(
-    @Query('section8') section8?: string,
-    @Query('secondChance') secondChance?: string,
-    @Query('roomRentals') roomRentals?: string,
-  ) {
-    return this.propertiesService.getPublicPreview({
-      acceptsSection8Vouchers: section8 === 'true' ? true : undefined,
-      secondChanceFriendly: secondChance === 'true' ? true : undefined,
-      roomRentals: roomRentals === 'true' ? true : undefined,
-    });
+  getPreview(@Query() rawQuery?: Record<string, string>) {
+    return this.propertiesService.getPublicPreview(parseSearchFilters(rawQuery ?? {}));
   }
 
   @Get('rent-estimate')

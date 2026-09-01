@@ -53,6 +53,10 @@ export default function NewPropertyPage() {
   const [propertyType, setPropertyType] = useState<PropertyType>('APARTMENT');
   const [acceptsSection8Vouchers, setAcceptsSection8Vouchers] = useState(false);
   const [secondChanceFriendly, setSecondChanceFriendly] = useState(false);
+  const [brokenLeaseOk, setBrokenLeaseOk] = useState(false);
+  const [cosignerAccepted, setCosignerAccepted] = useState(false);
+  const [noCreditCheckIncomeOnly, setNoCreditCheckIncomeOnly] = useState(false);
+  const [evictionAgeToleranceYears, setEvictionAgeToleranceYears] = useState('');
   const [bedrooms, setBedrooms] = useState('');
   const [bathrooms, setBathrooms] = useState('');
   const [squareFeet, setSquareFeet] = useState('');
@@ -106,6 +110,10 @@ export default function NewPropertyPage() {
         propertyType,
         acceptsSection8Vouchers,
         secondChanceFriendly,
+        brokenLeaseOk,
+        cosignerAccepted,
+        noCreditCheckIncomeOnly,
+        evictionAgeToleranceYears: evictionAgeToleranceYears.trim() ? parseInt(evictionAgeToleranceYears, 10) : undefined,
         amenities: amenities || undefined,
         utilitiesIncluded: utilitiesIncluded.length > 0 ? utilitiesIncluded : undefined,
         sewerSource: sewerSource || undefined,
@@ -393,6 +401,33 @@ export default function NewPropertyPage() {
               onChange={(e) => setSecondChanceFriendly(e.target.checked)}
             />
             Open to second-chance applicants (prior eviction, credit issue, or justice-involvement)
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
+            <input type="checkbox" checked={brokenLeaseOk} onChange={(e) => setBrokenLeaseOk(e.target.checked)} />
+            Will consider a broken lease or landlord debt
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
+            <input type="checkbox" checked={cosignerAccepted} onChange={(e) => setCosignerAccepted(e.target.checked)} />
+            Cosigner/guarantor accepted
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              checked={noCreditCheckIncomeOnly}
+              onChange={(e) => setNoCreditCheckIncomeOnly(e.target.checked)}
+            />
+            No credit check — proof of income only
+          </label>
+          <label style={labelStyle}>
+            Accept evictions older than this many years (optional)
+            <input
+              type="number"
+              min={0}
+              max={50}
+              value={evictionAgeToleranceYears}
+              onChange={(e) => setEvictionAgeToleranceYears(e.target.value)}
+              style={inputStyle}
+            />
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
             <input

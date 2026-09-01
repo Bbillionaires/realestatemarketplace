@@ -34,6 +34,13 @@ const LISTING_OPTIONS: { flag: keyof UpdatePropertyPayload; label: string; hint:
     label: 'Second-Chance Friendly',
     hint: 'Open to applicants with a prior eviction, credit issue, or justice-involvement.',
   },
+  { flag: 'brokenLeaseOk', label: 'Broken Lease OK', hint: 'Will consider an applicant with a broken lease or landlord debt.' },
+  { flag: 'cosignerAccepted', label: 'Cosigner Accepted', hint: 'A cosigner/guarantor is accepted in place of stricter tenant qualification.' },
+  {
+    flag: 'noCreditCheckIncomeOnly',
+    label: 'No Credit Check',
+    hint: 'No credit check is run — proof of income is used instead.',
+  },
   { flag: 'rentToOwnAvailable', label: 'Rent-to-Own', hint: 'Tenant may apply rent toward eventual purchase.' },
   { flag: 'leaseToOwnAvailable', label: 'Lease-to-Own', hint: 'Lease includes an option to buy at term end.' },
   { flag: 'sellerFinancingAvailable', label: 'Seller Financing', hint: 'You would finance the purchase directly for a buyer.' },
@@ -238,6 +245,10 @@ export default function PropertyDetailPage() {
       workForRentAvailable: property.workForRentAvailable,
       tenantSwapAllowed: property.tenantSwapAllowed,
       secondChanceFriendly: property.secondChanceFriendly,
+      brokenLeaseOk: property.brokenLeaseOk,
+      cosignerAccepted: property.cosignerAccepted,
+      noCreditCheckIncomeOnly: property.noCreditCheckIncomeOnly,
+      evictionAgeToleranceYears: property.evictionAgeToleranceYears ?? undefined,
     });
     setEditError(null);
     setEditOpen(true);
@@ -405,6 +416,19 @@ export default function PropertyDetailPage() {
   const canManage = property.ownerId !== undefined;
   const willingToSell = property.rentToOwnAvailable || property.leaseToOwnAvailable || property.sellerFinancingAvailable;
   const activePerks = LISTING_OPTIONS.filter((o) => property[o.flag as keyof PropertySummary]);
+  // Plain-language statement of this landlord's screening criteria, built
+  // from the same fields as the checkboxes above rather than free text —
+  // the "Transparent Approval Requirements" a second-chance renter can check
+  // before spending an application fee.
+  const approvalRequirements: string[] = [
+    property.secondChanceFriendly ? 'Open to applicants with a prior eviction, credit issue, or justice-involvement' : null,
+    property.evictionAgeToleranceYears !== null
+      ? `Evictions older than ${property.evictionAgeToleranceYears} year${property.evictionAgeToleranceYears === 1 ? '' : 's'} OK`
+      : null,
+    property.brokenLeaseOk ? 'Broken lease or landlord debt considered' : null,
+    property.cosignerAccepted ? 'Cosigner/guarantor accepted' : null,
+    property.noCreditCheckIncomeOnly ? 'No credit check — proof of income only' : null,
+  ].filter((r): r is string => r !== null);
   // Only worth a dedicated section when the property is actually broken
   // into individually-priced rooms/beds — a single ENTIRE_PLACE unit is
   // already fully represented by the headline price/bed/bath line above.
@@ -484,6 +508,27 @@ export default function PropertyDetailPage() {
                   {p.label}
                 </span>
               ))}
+            </div>
+          )}
+
+          {approvalRequirements.length > 0 && (
+            <div
+              style={{
+                background: theme.primaryLight,
+                border: `1px solid ${theme.border}`,
+                borderRadius: theme.radius,
+                padding: '12px 16px',
+                marginBottom: 12,
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 700, color: theme.primaryDark, marginBottom: 4 }}>
+                Approval Requirements
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: theme.text }}>
+                {approvalRequirements.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -581,6 +626,18 @@ export default function PropertyDetailPage() {
                     <dd style={{ margin: 0 }}>{property.acceptsSection8Vouchers ? 'Accepted' : 'Not accepted'}</dd>
                     <dt style={{ color: theme.textMuted }}>Second-Chance Friendly</dt>
                     <dd style={{ margin: 0 }}>{property.secondChanceFriendly ? 'Yes' : 'No'}</dd>
+                    <dt style={{ color: theme.textMuted }}>Eviction age tolerance</dt>
+                    <dd style={{ margin: 0 }}>
+                      {property.evictionAgeToleranceYears !== null
+                        ? `${property.evictionAgeToleranceYears}+ years old OK`
+                        : 'Not specified'}
+                    </dd>
+                    <dt style={{ color: theme.textMuted }}>Broken lease</dt>
+                    <dd style={{ margin: 0 }}>{property.brokenLeaseOk ? 'Considered' : 'Not specified'}</dd>
+                    <dt style={{ color: theme.textMuted }}>Cosigner</dt>
+                    <dd style={{ margin: 0 }}>{property.cosignerAccepted ? 'Accepted' : 'Not specified'}</dd>
+                    <dt style={{ color: theme.textMuted }}>Credit check</dt>
+                    <dd style={{ margin: 0 }}>{property.noCreditCheckIncomeOnly ? 'Not required — income only' : 'Not specified'}</dd>
                     <dt style={{ color: theme.textMuted }}>Rent-to-Own</dt>
                     <dd style={{ margin: 0 }}>{property.rentToOwnAvailable ? 'Available' : 'Not offered'}</dd>
                     <dt style={{ color: theme.textMuted }}>Lease-to-Own</dt>
@@ -813,6 +870,25 @@ export default function PropertyDetailPage() {
                     </span>
                   </label>
                 ))}
+
+                <div style={{ marginTop: 14, marginBottom: 14 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
+                    Accept evictions older than this many years (optional)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={50}
+                    value={editForm.evictionAgeToleranceYears ?? ''}
+                    onChange={(e) =>
+                      setEditForm((f) => ({
+                        ...f,
+                        evictionAgeToleranceYears: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                      }))
+                    }
+                    style={{ width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${theme.border}`, fontSize: 13, boxSizing: 'border-box' }}
+                  />
+                </div>
 
                 <div style={{ marginTop: 14, marginBottom: 14 }}>
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Amenities</label>

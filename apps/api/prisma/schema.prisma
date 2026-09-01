@@ -505,6 +505,17 @@ model Property {
   // demographic language) is what stays fair-housing-safe.
   secondChanceFriendly      Boolean @default(false)
 
+  // Granular screening criteria a landlord can state up front, so a
+  // second-chance renter doesn't waste an application fee on a mismatch —
+  // each is optional and defaults to not-stated/false, same fair-housing
+  // rationale as secondChanceFriendly above (screening criteria, not
+  // demographic language).
+  brokenLeaseOk             Boolean @default(false)
+  cosignerAccepted          Boolean @default(false)
+  noCreditCheckIncomeOnly   Boolean @default(false)
+  // Landlord-stated "evictions older than N years OK"; null = not stated.
+  evictionAgeToleranceYears Int?
+
   // "Featured Listing Boost": a flat one-time fee that surfaces this
   // property first in search results for 30 days. `boostedUntil` in the
   // future means currently boosted; a lapsed (past) or null value means
@@ -1022,13 +1033,36 @@ model TenantPacket {
   incomeProofMimeType  String?
   incomeProofFile      Bytes?
   backgroundExplanation String?
+  // Legacy free-text references — kept for existing submitted packets.
+  // New submissions use the structured referenceContacts below instead.
   references           String?
+  monthlyIncomeCents    Int?
+  employerName          String?
   submittedAt           DateTime?
+
+  referenceContacts TenantPacketReference[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([paymentOrderId])
+}
+
+// Structured reference contact for a Tenant Fast-Track Packet — replaces the
+// legacy free-text `references` column for new submissions. Full-replace on
+// each submit() call (delete + recreate) rather than diffed, since this is
+// low-volume personal data attached to one packet.
+model TenantPacketReference {
+  id             String       @id @default(uuid())
+  tenantPacketId String
+  tenantPacket   TenantPacket @relation(fields: [tenantPacketId], references: [id], onDelete: Cascade)
+  name           String
+  phone          String?
+  email          String?
+  relationship   String?
+  createdAt      DateTime     @default(now())
+
+  @@index([tenantPacketId])
 }
 
 // A small paid task a landlord/property manager posts for their own tenants,
