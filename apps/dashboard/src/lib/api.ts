@@ -112,6 +112,7 @@ export interface PropertySummary {
   tenantSwapAllowed: boolean;
   secondChanceFriendly: boolean;
   hasRoomRentals: boolean;
+  hqsPreInspected: boolean;
   boostedUntil: string | null;
   viewCount: number;
   ownerId?: string;

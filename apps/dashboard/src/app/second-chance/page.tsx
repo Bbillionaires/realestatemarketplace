@@ -7,6 +7,7 @@ import { useAuth } from '../../lib/auth-context';
 import { theme } from '../../lib/theme';
 import { PropertyCard } from '../../components/PropertyCard';
 import { NavBar } from '../../components/NavBar';
+import { RentToOwnCallout } from '../../components/RentToOwnCallout';
 
 export default function SecondChancePage() {
   const { accessToken, isLoading } = useAuth();
@@ -44,12 +45,58 @@ export default function SecondChancePage() {
     <main style={{ minHeight: '100vh', background: theme.bg }}>
       <NavBar />
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: 24 }}>
-        <h1 style={{ fontSize: 22, marginBottom: 4, color: theme.text }}>Second-Chance Apartments &amp; Eviction-Friendly Rentals</h1>
-        <p style={{ color: theme.textMuted, marginTop: 0, marginBottom: 20, fontSize: 14, maxWidth: 640 }}>
-          Browse second-chance apartments from private landlords open to applicants with a prior eviction, credit
-          issue, or justice-involvement — including no-credit-check and bad-credit rental listings. Message the
-          landlord through the platform to confirm current screening criteria before applying.
-        </p>
+        <div
+          style={{
+            background: theme.card,
+            border: `1px solid ${theme.border}`,
+            borderRadius: theme.radius,
+            boxShadow: theme.shadow,
+            padding: 24,
+            marginBottom: 24,
+          }}
+        >
+          <h1 style={{ fontSize: 22, margin: 0, color: theme.text }}>Second-Chance Apartments &amp; Eviction-Friendly Rentals</h1>
+          <p style={{ color: theme.text, marginTop: 10, marginBottom: 4, fontSize: 15, fontWeight: 700, maxWidth: 640 }}>
+            Your Past Doesn't Define Your Home.
+          </p>
+          <p style={{ color: theme.textMuted, marginTop: 0, marginBottom: 16, fontSize: 14, maxWidth: 640 }}>
+            Find landlords who look beyond credit scores and past evictions to give you a fresh start — including
+            no-credit-check and bad-credit rental listings. Message the landlord through the platform to confirm
+            current screening criteria before applying.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            <a
+              href="#listings"
+              style={{
+                padding: '10px 18px',
+                borderRadius: 8,
+                background: theme.primary,
+                color: 'white',
+                fontWeight: 700,
+                fontSize: 14,
+                textDecoration: 'none',
+              }}
+            >
+              Browse Second-Chance Listings
+            </a>
+            <Link
+              href="/tenant-packet"
+              style={{
+                padding: '10px 18px',
+                borderRadius: 8,
+                border: `1px solid ${theme.primary}`,
+                color: theme.primary,
+                fontWeight: 700,
+                fontSize: 14,
+                textDecoration: 'none',
+              }}
+            >
+              Build My Tenant Profile
+            </Link>
+          </div>
+        </div>
+
+        <RentToOwnCallout />
 
         {previewTotal !== null && previewTotal > properties.length && (
           <div
@@ -58,6 +105,7 @@ export default function SecondChancePage() {
               border: `1px solid ${theme.border}`,
               borderRadius: theme.radius,
               padding: '10px 14px',
+              marginTop: 20,
               marginBottom: 16,
               fontSize: 13,
               color: theme.text,
@@ -70,6 +118,14 @@ export default function SecondChancePage() {
             to see them all.
           </div>
         )}
+
+        <h2 id="listings" style={{ fontSize: 18, marginTop: 28, marginBottom: 4, color: theme.text }}>
+          Second-Chance Friendly Listings
+        </h2>
+        <p style={{ color: theme.textMuted, marginTop: 0, marginBottom: 16, fontSize: 13, maxWidth: 640 }}>
+          Listings below are marked by their landlord as open to applicants with a prior eviction, credit issue, or
+          justice-involvement.
+        </p>
 
         {loading && <p style={{ color: theme.textMuted }}>Loading...</p>}
         {error && <p style={{ color: theme.danger }}>{error}</p>}

@@ -102,6 +102,9 @@ export class PropertyResponseDto {
   // Derived from units rather than stored: true when any unit is rented
   // room-by-room (PRIVATE_ROOM/SHARED_ROOM) instead of as the entire place.
   hasRoomRentals!: boolean;
+  // Derived from HqsInspectionRequest rather than stored: true once the
+  // landlord has paid for (or completed) an HQS pre-inspection walkthrough.
+  hqsPreInspected!: boolean;
   viewCount!: number;
   createdAt!: Date;
   updatedAt!: Date;
@@ -153,6 +156,7 @@ export class PropertyResponseDto {
       ownerId: string;
       owner?: { profile?: { displayName: string } | null };
       managerAssignments?: { userId: string; revokedAt: Date | null }[];
+      hqsInspectionRequests?: { status: string }[];
       units?: {
         id: string;
         propertyId: string;
@@ -204,6 +208,7 @@ export class PropertyResponseDto {
     dto.landlordDisplayName = property.owner?.profile?.displayName ?? 'Property Management';
     dto.units = (property.units ?? []).map((u) => UnitResponseDto.from(u));
     dto.hasRoomRentals = (property.units ?? []).some((u) => u.listingType !== 'ENTIRE_PLACE');
+    dto.hqsPreInspected = (property.hqsInspectionRequests ?? []).length > 0;
     dto.viewCount = property.viewCount;
     dto.createdAt = property.createdAt;
     dto.updatedAt = property.updatedAt;

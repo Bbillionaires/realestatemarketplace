@@ -959,7 +959,11 @@ export default function PropertyDetailPage() {
               <>
                 <p style={{ fontSize: 13, color: theme.textMuted, marginTop: 8, marginBottom: 12 }}>
                   We handle the RTA paperwork and schedule a professional walkthrough so this property passes its HUD
-                  inspection on the first attempt.
+                  inspection on the first attempt. Not sure you'll pass?{' '}
+                  <Link href="/hqs-checklist" style={{ color: theme.primary }}>
+                    Check our HQS checklist first
+                  </Link>
+                  .
                 </p>
                 <button
                   onClick={purchaseHqsInspection}

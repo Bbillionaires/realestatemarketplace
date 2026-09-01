@@ -6,6 +6,7 @@ import { PhotoPlaceholder } from './PhotoPlaceholder';
 
 const PERK_BADGES: { flag: keyof PropertySummary; label: string }[] = [
   { flag: 'acceptsSection8Vouchers', label: 'Section 8 OK' },
+  { flag: 'hqsPreInspected', label: 'HQS Pre-Inspected' },
   { flag: 'secondChanceFriendly', label: 'Second-Chance Friendly' },
   { flag: 'hasRoomRentals', label: 'Room Rentals' },
   { flag: 'rentToOwnAvailable', label: 'Rent-to-Own' },

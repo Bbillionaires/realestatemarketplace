@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PropertyType, Role, UnitListingType } from '@prisma/client';
+import { HqsInspectionStatus, PropertyType, Role, UnitListingType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { AppConfig } from '../config/configuration';
@@ -50,6 +50,11 @@ const PROPERTY_INCLUDE = {
   owner: { include: { profile: true } },
   managerAssignments: true,
   units: { include: { beds: true } },
+  // Only the still-relevant statuses — used to derive the "HQS Pre-Inspected"
+  // badge (PropertyResponseDto.hqsPreInspected) without a stored column.
+  hqsInspectionRequests: {
+    where: { status: { in: [HqsInspectionStatus.PAID, HqsInspectionStatus.REQUESTED] as HqsInspectionStatus[] } },
+  },
 } as const;
 
 @Injectable()

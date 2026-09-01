@@ -24,6 +24,8 @@ const RENTER_LINKS: NavLink[] = [
   { href: '/section8', label: 'Section 8 Housing' },
   { href: '/voucher-matcher', label: 'Voucher Value Matcher' },
   { href: '/second-chance', label: 'Second-Chance Friendly' },
+  { href: '/hqs-checklist', label: 'HQS Fast-Track Checklist' },
+  { href: '/housing-authorities', label: 'Housing Authority Directory' },
   { href: '/rooms', label: 'Room & Co-Living Rentals' },
   { href: '/waitlists', label: 'Waiting Lists' },
   { href: '/tenant-packet', label: 'Fast-Track Packet' },
