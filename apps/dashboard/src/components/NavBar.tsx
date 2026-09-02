@@ -30,6 +30,7 @@ const RENTER_LINKS: NavLink[] = [
   { href: '/rooms', label: 'Room & Co-Living Rentals' },
   { href: '/waitlists', label: 'Waiting Lists' },
   { href: '/tenant-packet', label: 'Fast-Track Packet' },
+  { href: '/homeownership-tracker', label: 'Homeownership Tracker' },
 ];
 
 const OWNER_LINKS: NavLink[] = [
@@ -197,6 +198,7 @@ export function NavBar() {
                   <DrawerLink href="/gig-jobs" label="Gig Jobs" onClick={close} />
                   {isStaff && <DrawerLink href="/moderation" label="Moderation" onClick={close} />}
                   {isAdmin && <DrawerLink href="/admin/lenders" label="Lender Assignments" onClick={close} />}
+                  {isAdmin && <DrawerLink href="/admin/homeownership-milestones" label="Homeownership Milestones" onClick={close} />}
                   {isLender && <DrawerLink href="/lender" label="Lender Dashboard" onClick={close} />}
                   {isTenant && <DrawerLink href="/lender-requests" label="Lender Requests" onClick={close} />}
                   <button

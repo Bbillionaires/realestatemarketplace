@@ -361,6 +361,7 @@ model User {
   landlordSubscription  LandlordSubscription?
   hqsInspectionRequests HqsInspectionRequest[]
   tenantPacket          TenantPacket?
+  homeownershipProgress HomeownershipProgress?
 
   @@index([role])
 }
@@ -1063,6 +1064,49 @@ model TenantPacketReference {
   createdAt      DateTime     @default(now())
 
   @@index([tenantPacketId])
+}
+
+// Admin-managed milestone definitions for the Homeownership Progress Tracker —
+// the checklist content itself, editable without a code change. Global, not
+// scoped to any one tenant.
+model HomeownershipMilestone {
+  id        String   @id @default(uuid())
+  label     String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  completions HomeownershipMilestoneCompletion[]
+}
+
+// One row per tenant — savings goal/current amount, mirrors TenantPacket's
+// one-row-per-tenant shape (tenantId unique, lazily created on first real
+// update rather than on first read).
+model HomeownershipProgress {
+  id                  String   @id @default(uuid())
+  tenantId            String   @unique
+  tenant              User     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  savingsGoalCents    Int?
+  currentSavingsCents Int?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  completions HomeownershipMilestoneCompletion[]
+}
+
+// Join row: this tenant has completed this milestone, and when.
+model HomeownershipMilestoneCompletion {
+  id          String                 @id @default(uuid())
+  progressId  String
+  progress    HomeownershipProgress  @relation(fields: [progressId], references: [id], onDelete: Cascade)
+  milestoneId String
+  milestone   HomeownershipMilestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  completedAt DateTime               @default(now())
+
+  @@unique([progressId, milestoneId])
+  @@index([progressId])
+  @@index([milestoneId])
 }
 
 // A small paid task a landlord/property manager posts for their own tenants,

@@ -574,6 +574,19 @@ export interface TenantPacketSummary {
   submittedAt: string | null;
 }
 
+export interface HomeownershipMilestone {
+  id: string;
+  label: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface HomeownershipProgress {
+  savingsGoalCents: number | null;
+  currentSavingsCents: number | null;
+  completedMilestoneIds: string[];
+}
+
 export interface StartConversationResult {
   conversation: ConversationSummary;
   message: MessageSummary;
@@ -861,6 +874,43 @@ export const api = {
   },
   shareTenantPacket: (accessToken: string, conversationId: string) =>
     request<{ emailed: boolean }>(`/conversations/${conversationId}/tenant-packet/share`, { method: 'POST' }, accessToken),
+  listActiveMilestones: (accessToken: string) =>
+    request<HomeownershipMilestone[]>('/homeownership-milestones', {}, accessToken),
+  listAllMilestones: (accessToken: string) =>
+    request<HomeownershipMilestone[]>('/homeownership-milestones/all', {}, accessToken),
+  createMilestone: (accessToken: string, payload: { label: string; sortOrder?: number }) =>
+    request<HomeownershipMilestone>('/homeownership-milestones', { method: 'POST', body: JSON.stringify(payload) }, accessToken),
+  updateMilestone: (
+    accessToken: string,
+    id: string,
+    payload: { label?: string; sortOrder?: number; isActive?: boolean },
+  ) =>
+    request<HomeownershipMilestone>(
+      `/homeownership-milestones/${id}`,
+      { method: 'PATCH', body: JSON.stringify(payload) },
+      accessToken,
+    ),
+  deleteMilestone: (accessToken: string, id: string) =>
+    request<void>(`/homeownership-milestones/${id}`, { method: 'DELETE' }, accessToken),
+  getHomeownershipProgress: (accessToken: string) =>
+    request<HomeownershipProgress>('/homeownership-progress/me', {}, accessToken),
+  updateHomeownershipProgress: (
+    accessToken: string,
+    payload: { savingsGoalCents?: number; currentSavingsCents?: number },
+  ) =>
+    request<HomeownershipProgress>(
+      '/homeownership-progress/me',
+      { method: 'PATCH', body: JSON.stringify(payload) },
+      accessToken,
+    ),
+  markMilestoneComplete: (accessToken: string, milestoneId: string) =>
+    request<HomeownershipProgress>(`/homeownership-progress/me/milestones/${milestoneId}`, { method: 'POST' }, accessToken),
+  unmarkMilestoneComplete: (accessToken: string, milestoneId: string) =>
+    request<HomeownershipProgress>(
+      `/homeownership-progress/me/milestones/${milestoneId}`,
+      { method: 'DELETE' },
+      accessToken,
+    ),
   /** Dev/test only — stands in for the real payment processor calling our webhook after a completed charge. */
   simulateMockPayment: (providerOrderId: string) =>
     request<{ status: string }>('/payments/webhooks', {

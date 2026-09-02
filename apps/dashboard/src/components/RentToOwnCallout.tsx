@@ -1,8 +1,6 @@
+import Link from 'next/link';
 import { theme } from '../lib/theme';
 
-// Static informational callout for v1 — intentionally not a per-user
-// progress tracker (that would need its own data model and login-gated
-// state; a real "credit readiness" tracker is a separate, larger feature).
 export function RentToOwnCallout() {
   return (
     <div
@@ -39,6 +37,9 @@ export function RentToOwnCallout() {
         >
           Down payment assistance programs →
         </a>
+        <Link href="/homeownership-tracker" style={{ color: theme.primary, fontWeight: 600 }}>
+          Track my progress →
+        </Link>
       </div>
     </div>
   );
