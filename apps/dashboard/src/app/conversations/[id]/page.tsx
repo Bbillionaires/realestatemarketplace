@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, ConversationSummary, IdSubmissionSummary, MessageSummary, ShowingSummary, VoucherAccessRequestSummary } from '../../../lib/api';
+import { api, ConversationSummary, IdSubmissionSummary, MessageSummary, ShowingSummary, TenantScreeningSummary, VoucherAccessRequestSummary } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth-context';
 import { useCurrentUser } from '../../../lib/use-current-user';
 import { useConversationSocket } from '../../../lib/use-conversation-socket';
@@ -13,6 +13,7 @@ import { NavBar } from '../../../components/NavBar';
 import { ShowingPanel } from '../../../components/ShowingPanel';
 import { IdSubmissionPanel } from '../../../components/IdSubmissionPanel';
 import { VoucherAccessPanel } from '../../../components/VoucherAccessPanel';
+import { TenantScreeningPanel } from '../../../components/TenantScreeningPanel';
 
 // Real-time updates arrive over the WebSocket (see useConversationSocket);
 // this is just a low-frequency safety net in case a socket silently drops.
@@ -29,6 +30,7 @@ export default function ConversationThreadPage() {
   const [showing, setShowing] = useState<ShowingSummary | null>(null);
   const [idSubmission, setIdSubmission] = useState<IdSubmissionSummary | null>(null);
   const [voucherAccessRequest, setVoucherAccessRequest] = useState<VoucherAccessRequestSummary | null>(null);
+  const [tenantScreening, setTenantScreening] = useState<TenantScreeningSummary | null>(null);
   const [packetShareBusy, setPacketShareBusy] = useState(false);
   const [packetShareError, setPacketShareError] = useState<string | null>(null);
   const [packetShared, setPacketShared] = useState(false);
@@ -43,18 +45,20 @@ export default function ConversationThreadPage() {
 
   const refresh = useCallback(async () => {
     if (!accessToken) return;
-    const [conv, msgs, showings, idSubmissions, voucherRequest] = await Promise.all([
+    const [conv, msgs, showings, idSubmissions, voucherRequest, screening] = await Promise.all([
       api.getConversation(accessToken, id),
       api.listMessages(accessToken, id),
       api.listShowings(accessToken, id),
       api.listIdSubmissions(accessToken, id),
       api.getVoucherAccessRequest(accessToken, id),
+      api.getConversationTenantScreening(accessToken, id),
     ]);
     setConversation(conv);
     setMessages(msgs);
     setShowing(showings[0] ?? null);
     setIdSubmission(idSubmissions.find((s) => s.status !== 'CANCELLED') ?? null);
     setVoucherAccessRequest(voucherRequest);
+    setTenantScreening(screening);
   }, [accessToken, id]);
 
   useEffect(() => {
@@ -277,6 +281,16 @@ export default function ConversationThreadPage() {
             isTenantView={isTenantView}
             request={voucherAccessRequest}
             onRequestChange={setVoucherAccessRequest}
+          />
+        )}
+
+        {accessToken && (
+          <TenantScreeningPanel
+            accessToken={accessToken}
+            conversationId={id}
+            isTenantView={isTenantView}
+            screening={tenantScreening}
+            onScreeningChange={setTenantScreening}
           />
         )}
 

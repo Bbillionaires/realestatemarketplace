@@ -4,12 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { IdSubmissionStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { RegistrantOverviewDto } from './dto/registrant-overview.dto';
 
 const ADMIN_ROLES: Role[] = [Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR];
 const STAFF_ROLES: Role[] = [Role.STAFF_MODERATOR, Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR];
@@ -59,6 +60,37 @@ export class UsersService {
       take,
     });
     return users.map((u) => UserResponseDto.from(u));
+  }
+
+  /** Staff-only "where is this registrant in the process" rollup across every paid/free feature. */
+  async findRegistrantOverview(params: { skip?: number; take?: number }): Promise<RegistrantOverviewDto[]> {
+    const { skip = 0, take = 50 } = params;
+    const users = await this.prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
+      include: {
+        profile: { select: { displayName: true } },
+        tenantPacket: { select: { status: true } },
+        voucherDocument: { select: { uploadedAt: true } },
+        homeownershipProgress: { select: { id: true } },
+        tenantScreenings: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { kind: true, status: true, expiresAt: true },
+        },
+        conversationsAsTenant: {
+          select: {
+            idSubmissions: {
+              where: { status: IdSubmissionStatus.SUBMITTED },
+              select: { id: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    return users.map((u) => RegistrantOverviewDto.from(u));
   }
 
   /**

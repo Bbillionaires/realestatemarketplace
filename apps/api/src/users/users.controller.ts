@@ -35,6 +35,15 @@ export class UsersController {
     });
   }
 
+  @Get('admin/overview')
+  @Roles(Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR, Role.STAFF_MODERATOR)
+  registrantOverview(@Query('skip') skip?: string, @Query('take') take?: string) {
+    return this.usersService.findRegistrantOverview({
+      skip: skip ? parseInt(skip, 10) : undefined,
+      take: take ? parseInt(take, 10) : undefined,
+    });
+  }
+
   @Get(':id')
   @Roles(Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR, Role.STAFF_MODERATOR)
   findOne(@Param('id') id: string) {

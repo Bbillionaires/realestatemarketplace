@@ -6,6 +6,7 @@ import { JobReferralsService } from '../job-referrals/job-referrals.service';
 import { PropertiesService } from '../properties/properties.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { HqsInspectionsService } from '../hqs-inspections/hqs-inspections.service';
+import { TenantScreeningsService } from '../tenant-screenings/tenant-screenings.service';
 
 /**
  * Unauthenticated by JWT — the payment processor (or the mock provider's
@@ -27,6 +28,7 @@ export class PaymentWebhooksController {
     private readonly propertiesService: PropertiesService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly hqsInspectionsService: HqsInspectionsService,
+    private readonly tenantScreeningsService: TenantScreeningsService,
   ) {}
 
   @Post()
@@ -43,6 +45,7 @@ export class PaymentWebhooksController {
     await this.propertiesService.handlePaymentWebhook(signature ?? '', url, rawBody);
     await this.subscriptionsService.handlePaymentWebhook(signature ?? '', url, rawBody);
     await this.hqsInspectionsService.handlePaymentWebhook(signature ?? '', url, rawBody);
+    await this.tenantScreeningsService.handlePaymentWebhook(signature ?? '', url, rawBody);
     return { status: 'ok' };
   }
 }

@@ -29,6 +29,7 @@ export interface AppConfig {
   featuredBoostFeeCents: number;
   hqsInspectionFeeCents: number;
   hqsInspectionsEmail: string;
+  tenantScreeningFeeCents: number;
   /** Length of a paid Landlord Pro/Unlimited period and a Featured Listing Boost — both are flat, manually-renewed periods, not recurring billing. */
   paidPeriodDays: number;
   geocodingProvider: 'mock' | 'census';
@@ -91,6 +92,7 @@ export default (): AppConfig => ({
   featuredBoostFeeCents: parseInt(process.env.FEATURED_BOOST_FEE_CENTS ?? '2900', 10),
   hqsInspectionFeeCents: parseInt(process.env.HQS_INSPECTION_FEE_CENTS ?? '19900', 10),
   hqsInspectionsEmail: process.env.HQS_INSPECTIONS_EMAIL ?? 'inspections@affordablehomematch.com',
+  tenantScreeningFeeCents: parseInt(process.env.TENANT_SCREENING_FEE_CENTS ?? '5000', 10),
   paidPeriodDays: parseInt(process.env.PAID_PERIOD_DAYS ?? '30', 10),
   geocodingProvider: (process.env.GEOCODING_PROVIDER as 'mock' | 'census') ?? 'mock',
   schoolsProvider: (process.env.SCHOOLS_PROVIDER as 'mock' | 'greatschools') ?? 'mock',

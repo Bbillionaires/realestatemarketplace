@@ -664,6 +664,61 @@ export interface VoucherAccessRequestSummary {
   respondedAt: string | null;
 }
 
+export type TenantScreeningKind = 'PORTABLE' | 'APPLICATION';
+export type TenantScreeningStatus =
+  | 'AWAITING_TENANT_AUTHORIZATION'
+  | 'PAID'
+  | 'SUBMITTED_EXTERNALLY'
+  | 'COMPLETE'
+  | 'DECLINED'
+  | 'CANCELLED';
+
+export interface TenantScreeningSummary {
+  id: string | null;
+  kind: TenantScreeningKind | null;
+  status: TenantScreeningStatus | null;
+  conversationId: string | null;
+  initiatedById: string | null;
+  feeCents: number | null;
+  checkoutUrl: string | null;
+  paidAt: string | null;
+  expiresAt: string | null;
+  resultFileName: string | null;
+  resultUploadedAt: string | null;
+  createdAt: string | null;
+}
+
+export interface TenantScreeningAdminSummary {
+  id: string;
+  kind: TenantScreeningKind;
+  status: TenantScreeningStatus;
+  tenantId: string;
+  tenantEmail: string;
+  tenantDisplayName: string | null;
+  initiatedById: string | null;
+  initiatedByEmail: string | null;
+  conversationId: string | null;
+  feeCents: number;
+  paidAt: string | null;
+  resultFileName: string | null;
+  resultUploadedAt: string | null;
+  staffNotes: string | null;
+  createdAt: string;
+}
+
+export interface RegistrantOverviewRow {
+  id: string;
+  email: string;
+  displayName: string | null;
+  role: string;
+  createdAt: string;
+  tenantPacketStatus: TenantPacketStatus | null;
+  hasVoucherUpload: boolean;
+  hasSubmittedId: boolean;
+  homeownershipEnrolled: boolean;
+  latestScreening: { kind: TenantScreeningKind; status: TenantScreeningStatus; expiresAt: string | null } | null;
+}
+
 export interface StartConversationResult {
   conversation: ConversationSummary;
   message: MessageSummary;
@@ -1013,6 +1068,55 @@ export const api = {
     request<VoucherAccessRequestSummary>(`/voucher-access-requests/${id}/accept`, { method: 'PATCH' }, accessToken),
   declineVoucherAccessRequest: (accessToken: string, id: string) =>
     request<VoucherAccessRequestSummary>(`/voucher-access-requests/${id}/decline`, { method: 'PATCH' }, accessToken),
+  createMyTenantScreening: (accessToken: string) =>
+    request<TenantScreeningSummary>('/tenant-screenings', { method: 'POST' }, accessToken),
+  requestTenantScreening: (accessToken: string, tenantEmail: string) =>
+    request<TenantScreeningSummary>(
+      '/tenant-screenings/request',
+      { method: 'POST', body: JSON.stringify({ tenantEmail, acknowledgeHoldHarmless: true }) },
+      accessToken,
+    ),
+  listMyTenantScreenings: (accessToken: string) =>
+    request<TenantScreeningSummary[]>('/tenant-screenings/me', {}, accessToken),
+  payTenantScreening: (accessToken: string, id: string) =>
+    request<TenantScreeningSummary>(`/tenant-screenings/${id}/pay`, { method: 'POST' }, accessToken),
+  declineTenantScreening: (accessToken: string, id: string) =>
+    request<TenantScreeningSummary>(`/tenant-screenings/${id}/decline`, { method: 'PATCH' }, accessToken),
+  shareTenantScreening: (accessToken: string, id: string, conversationId: string) =>
+    request<{ shared: boolean }>(
+      `/tenant-screenings/${id}/share`,
+      { method: 'POST', body: JSON.stringify({ conversationId }) },
+      accessToken,
+    ),
+  downloadTenantScreening: (accessToken: string, id: string) => downloadFile(`/tenant-screenings/${id}/download`, accessToken),
+  requestTenantScreeningForConversation: (accessToken: string, conversationId: string) =>
+    request<TenantScreeningSummary>(
+      `/conversations/${conversationId}/tenant-screenings`,
+      { method: 'POST', body: JSON.stringify({ acknowledgeHoldHarmless: true }) },
+      accessToken,
+    ),
+  getConversationTenantScreening: (accessToken: string, conversationId: string) =>
+    request<TenantScreeningSummary>(`/conversations/${conversationId}/tenant-screenings`, {}, accessToken),
+  downloadConversationTenantScreening: (accessToken: string, conversationId: string) =>
+    downloadFile(`/conversations/${conversationId}/tenant-screenings/download`, accessToken),
+  listAdminTenantScreenings: (accessToken: string, status?: TenantScreeningStatus) =>
+    request<TenantScreeningAdminSummary[]>(
+      `/tenant-screenings/admin${status ? `?status=${status}` : ''}`,
+      {},
+      accessToken,
+    ),
+  markScreeningSubmittedExternally: (accessToken: string, id: string) =>
+    request<TenantScreeningAdminSummary>(`/tenant-screenings/admin/${id}/mark-submitted`, { method: 'PATCH' }, accessToken),
+  uploadScreeningResult: (accessToken: string, id: string, file: File, staffNotes?: string) => {
+    const formData = new FormData();
+    formData.set('file', file);
+    if (staffNotes) formData.set('staffNotes', staffNotes);
+    return requestMultipart<TenantScreeningAdminSummary>(`/tenant-screenings/admin/${id}/result`, formData, accessToken);
+  },
+  cancelTenantScreening: (accessToken: string, id: string) =>
+    request<TenantScreeningAdminSummary>(`/tenant-screenings/admin/${id}/cancel`, { method: 'PATCH' }, accessToken),
+  listRegistrantOverview: (accessToken: string, skip = 0, take = 50) =>
+    request<RegistrantOverviewRow[]>(`/users/admin/overview?skip=${skip}&take=${take}`, {}, accessToken),
   /** Dev/test only — stands in for the real payment processor calling our webhook after a completed charge. */
   simulateMockPayment: (providerOrderId: string) =>
     request<{ status: string }>('/payments/webhooks', {

@@ -363,6 +363,8 @@ model User {
   tenantPacket          TenantPacket?
   homeownershipProgress HomeownershipProgress?
   voucherDocument       VoucherDocument?
+  tenantScreenings          TenantScreening[] @relation("TenantScreeningSubject")
+  tenantScreeningsInitiated TenantScreening[] @relation("TenantScreeningInitiator")
 
   @@index([role])
 }
@@ -757,6 +759,8 @@ model Conversation {
   violations       Violation[]
   adminNotes       AdminNote[]
   voucherAccessRequest VoucherAccessRequest?
+  tenantScreenings      TenantScreening[]
+  tenantScreeningShares TenantScreeningShare[]
 
   @@index([propertyId])
   @@index([tenantId])
@@ -1149,6 +1153,85 @@ model VoucherAccessRequest {
   createdAt      DateTime            @default(now())
   respondedAt    DateTime?
 
+  @@index([conversationId])
+}
+
+enum TenantScreeningKind {
+  PORTABLE
+  APPLICATION
+}
+
+enum TenantScreeningStatus {
+  AWAITING_TENANT_AUTHORIZATION
+  PAID
+  SUBMITTED_EXTERNALLY
+  COMPLETE
+  DECLINED
+  CANCELLED
+}
+
+// A background/eviction screening on one tenant. Bytes live directly in
+// Postgres, same as VoucherDocument/TenantPacket — no blob storage exists in
+// this app. This is a manual, off-platform-fulfilled product: there is no
+// screening-provider API integration. Admin does the actual check outside the
+// app (via a third-party platform the in-house broker already has access to)
+// and uploads the result back in.
+model TenantScreening {
+  id     String                @id @default(uuid())
+  tenantId String
+  tenant   User                @relation("TenantScreeningSubject", fields: [tenantId], references: [id], onDelete: Cascade)
+  kind   TenantScreeningKind
+  status TenantScreeningStatus @default(AWAITING_TENANT_AUTHORIZATION)
+
+  // Set when a landlord/PM/employer (not the tenant) initiated this — the
+  // tenant still has to pay+authorize before anything happens. Null for
+  // self-initiated.
+  initiatedById           String?
+  initiatedBy             User?     @relation("TenantScreeningInitiator", fields: [initiatedById], references: [id], onDelete: SetNull)
+  initiatorAcknowledgedAt DateTime?
+
+  // Set only for kind = APPLICATION. Null for a PORTABLE screening (which may
+  // later be *shared* into conversations — see TenantScreeningShare).
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  feeCents                  Int       @default(5000)
+  paymentProviderCheckoutId String?
+  paymentOrderId            String?
+  checkoutUrl               String?
+  paidAt                    DateTime?
+  expiresAt                 DateTime?
+
+  resultFileName          String?
+  resultMimeType          String?
+  resultFile              Bytes?
+  resultUploadedByStaffId String?
+  resultUploadedAt        DateTime?
+  staffNotes               String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shares TenantScreeningShare[]
+
+  @@index([tenantId])
+  @@index([conversationId])
+  @@index([paymentOrderId])
+}
+
+// A completed PORTABLE screening the tenant has chosen to make visible to one
+// more conversation's landlord/PM. APPLICATION-kind screenings don't need
+// this — conversationId on the row itself already grants that one
+// conversation access.
+model TenantScreeningShare {
+  id                String          @id @default(uuid())
+  tenantScreeningId String
+  tenantScreening   TenantScreening @relation(fields: [tenantScreeningId], references: [id], onDelete: Cascade)
+  conversationId    String
+  conversation      Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sharedAt          DateTime        @default(now())
+
+  @@unique([tenantScreeningId, conversationId])
   @@index([conversationId])
 }
 

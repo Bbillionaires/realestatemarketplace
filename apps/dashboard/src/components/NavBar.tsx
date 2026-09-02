@@ -197,10 +197,13 @@ export function NavBar() {
                 <>
                   <DrawerLink href="/inbox" label="Inbox" onClick={close} />
                   <DrawerLink href="/gig-jobs" label="Gig Jobs" onClick={close} />
+                  <DrawerLink href="/tenant-screening" label="Tenant Screening" onClick={close} />
                   {isStaff && <DrawerLink href="/moderation" label="Moderation" onClick={close} />}
                   {isAdmin && <DrawerLink href="/admin/lenders" label="Lender Assignments" onClick={close} />}
                   {isAdmin && <DrawerLink href="/admin/homeownership-milestones" label="Homeownership Milestones" onClick={close} />}
                   {isStaff && <DrawerLink href="/admin/voucher-documents" label="Housing Voucher Uploads" onClick={close} />}
+                  {isStaff && <DrawerLink href="/admin/tenant-screenings" label="Tenant Screening Requests" onClick={close} />}
+                  {isStaff && <DrawerLink href="/admin/registrants" label="Registrant Overview" onClick={close} />}
                   {isLender && <DrawerLink href="/lender" label="Lender Dashboard" onClick={close} />}
                   {isTenant && <DrawerLink href="/lender-requests" label="Lender Requests" onClick={close} />}
                   <button
