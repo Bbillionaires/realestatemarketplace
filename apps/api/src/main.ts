@@ -17,6 +17,12 @@ async function bootstrap() {
   app.enableCors({
     origin: corsOriginValidator(allowedOrigins),
     credentials: true,
+    // Content-Disposition isn't on the CORS-safelisted response header list,
+    // so without this the dashboard's cross-origin fetch() can never read the
+    // real filename off a voucher-document download response — it silently
+    // falls back to a generic name instead of erroring, which is what made
+    // this easy to miss.
+    exposedHeaders: ['Content-Disposition'],
   });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
