@@ -362,6 +362,7 @@ model User {
   hqsInspectionRequests HqsInspectionRequest[]
   tenantPacket          TenantPacket?
   homeownershipProgress HomeownershipProgress?
+  voucherDocument       VoucherDocument?
 
   @@index([role])
 }
@@ -755,6 +756,7 @@ model Conversation {
   moderationFlags  ModerationFlag[]
   violations       Violation[]
   adminNotes       AdminNote[]
+  voucherAccessRequest VoucherAccessRequest?
 
   @@index([propertyId])
   @@index([tenantId])
@@ -1107,6 +1109,47 @@ model HomeownershipMilestoneCompletion {
   @@unique([progressId, milestoneId])
   @@index([progressId])
   @@index([milestoneId])
+}
+
+enum VoucherAccessStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REVOKED
+}
+
+// The tenant's uploaded HUD Housing Choice Voucher. One row per tenant (like
+// TenantPacket), replaced in place on re-upload. Bytes live directly in
+// Postgres — the only other precedent for this is TenantPacket.incomeProofFile.
+model VoucherDocument {
+  id         String   @id @default(uuid())
+  tenantId   String   @unique
+  tenant     User     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  fileName   String
+  mimeType   String
+  fileData   Bytes
+  uploadedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// One evolving row per conversation — a landlord's standing request to view a
+// tenant's voucher. No direct FK to VoucherDocument; the tenant's document is
+// reached via conversation.tenant.voucherDocument, mirroring how
+// LenderPaymentRequest reaches its tenant via lenderAssignment.tenantId rather
+// than duplicating the relationship. Re-requesting after DECLINED/REVOKED
+// resets the same row to PENDING rather than growing a history table — the
+// full history of accept/decline/revoke/re-request actions is preserved
+// separately via the existing @AuditLog/audit-table mechanism.
+model VoucherAccessRequest {
+  id             String              @id @default(uuid())
+  conversationId String              @unique
+  conversation   Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  status         VoucherAccessStatus @default(PENDING)
+  message        String?
+  createdAt      DateTime            @default(now())
+  respondedAt    DateTime?
+
+  @@index([conversationId])
 }
 
 // A small paid task a landlord/property manager posts for their own tenants,

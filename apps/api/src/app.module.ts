@@ -31,6 +31,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { HqsInspectionsModule } from './hqs-inspections/hqs-inspections.module';
 import { TenantPacketsModule } from './tenant-packets/tenant-packets.module';
 import { HomeownershipModule } from './homeownership/homeownership.module';
+import { HousingVouchersModule } from './housing-vouchers/housing-vouchers.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -80,6 +81,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     HqsInspectionsModule,
     TenantPacketsModule,
     HomeownershipModule,
+    HousingVouchersModule,
   ],
   providers: [
     // Order matters: JwtAuthGuard populates request.user, then RolesGuard

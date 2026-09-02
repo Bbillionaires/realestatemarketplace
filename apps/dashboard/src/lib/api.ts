@@ -43,6 +43,59 @@ async function requestMultipart<T>(path: string, formData: FormData, accessToken
   return body as T;
 }
 
+/** Parses a `Content-Disposition: ...; filename="x"; filename*=UTF-8''x` header into a filename. */
+function parseFileName(disposition: string | null): string {
+  if (!disposition) return 'download';
+  const starMatch = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  if (starMatch) return decodeURIComponent(starMatch[1]);
+  const plainMatch = /filename="?([^";]+)"?/i.exec(disposition);
+  return plainMatch ? plainMatch[1] : 'download';
+}
+
+async function fetchAuthenticatedBlob(path: string, accessToken: string): Promise<{ blob: Blob; fileName: string }> {
+  const res = await fetch(`${API_BASE_URL}/api${path}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) {
+    const body = await res.json().catch(() => undefined);
+    const message = body?.error?.message ?? res.statusText;
+    throw new Error(Array.isArray(message) ? message.join(', ') : message);
+  }
+  const fileName = parseFileName(res.headers.get('Content-Disposition'));
+  const blob = await res.blob();
+  return { blob, fileName };
+}
+
+/** Forces a browser "Save As" download — for viewing someone else's uploaded content
+ * (admin/landlord). A programmatic <a download> click isn't subject to the popup-blocker
+ * rules that a post-await window.open() would run into. */
+async function downloadFile(path: string, accessToken: string): Promise<void> {
+  const { blob, fileName } = await fetchAuthenticatedBlob(path, accessToken);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Opens a file inline in a new tab — for viewing your own uploaded content. The
+ * window must be opened synchronously inside the click handler (before the fetch
+ * resolves) or Safari treats the later window.open as a blocked popup. */
+function openInlineFile(path: string, accessToken: string): void {
+  const win = window.open('', '_blank');
+  fetchAuthenticatedBlob(path, accessToken)
+    .then(({ blob }) => {
+      const url = URL.createObjectURL(blob);
+      if (win) win.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    })
+    .catch((err) => {
+      win?.close();
+      throw err;
+    });
+}
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -587,6 +640,36 @@ export interface HomeownershipProgress {
   completedMilestoneIds: string[];
 }
 
+export type VoucherAccessStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'REVOKED';
+
+export interface VoucherDocumentSummary {
+  hasDocument: boolean;
+  fileName: string | null;
+  mimeType: string | null;
+  uploadedAt: string | null;
+}
+
+export interface VoucherAdminDocumentSummary {
+  tenantId: string;
+  tenantDisplayName: string;
+  tenantEmail: string;
+  fileName: string;
+  mimeType: string;
+  uploadedAt: string;
+}
+
+export interface VoucherAccessRequestSummary {
+  id: string | null;
+  conversationId: string;
+  propertyTitle: string;
+  landlordDisplayName: string;
+  tenantDisplayName: string;
+  status: VoucherAccessStatus | null;
+  message: string | null;
+  createdAt: string | null;
+  respondedAt: string | null;
+}
+
 export interface StartConversationResult {
   conversation: ConversationSummary;
   message: MessageSummary;
@@ -911,6 +994,33 @@ export const api = {
       { method: 'DELETE' },
       accessToken,
     ),
+  getMyVoucherDocument: (accessToken: string) => request<VoucherDocumentSummary>('/voucher-documents/me', {}, accessToken),
+  uploadVoucherDocument: (accessToken: string, file: File) => {
+    const formData = new FormData();
+    formData.set('file', file);
+    return requestMultipart<VoucherDocumentSummary>('/voucher-documents/me', formData, accessToken);
+  },
+  viewMyVoucherDocument: (accessToken: string) => openInlineFile('/voucher-documents/me/download', accessToken),
+  listAdminVoucherDocuments: (accessToken: string) =>
+    request<VoucherAdminDocumentSummary[]>('/voucher-documents/admin', {}, accessToken),
+  downloadVoucherAsAdmin: (accessToken: string, tenantId: string) =>
+    downloadFile(`/voucher-documents/admin/${tenantId}/download`, accessToken),
+  getVoucherAccessRequest: (accessToken: string, conversationId: string) =>
+    request<VoucherAccessRequestSummary>(`/conversations/${conversationId}/voucher-access-requests`, {}, accessToken),
+  requestVoucherAccess: (accessToken: string, conversationId: string, message?: string) =>
+    request<VoucherAccessRequestSummary>(
+      `/conversations/${conversationId}/voucher-access-requests`,
+      { method: 'POST', body: JSON.stringify({ message }) },
+      accessToken,
+    ),
+  downloadVoucherForConversation: (accessToken: string, conversationId: string) =>
+    downloadFile(`/conversations/${conversationId}/voucher-access-requests/download`, accessToken),
+  listMyVoucherAccessRequests: (accessToken: string) =>
+    request<VoucherAccessRequestSummary[]>('/voucher-access-requests/me', {}, accessToken),
+  acceptVoucherAccessRequest: (accessToken: string, id: string) =>
+    request<VoucherAccessRequestSummary>(`/voucher-access-requests/${id}/accept`, { method: 'PATCH' }, accessToken),
+  declineVoucherAccessRequest: (accessToken: string, id: string) =>
+    request<VoucherAccessRequestSummary>(`/voucher-access-requests/${id}/decline`, { method: 'PATCH' }, accessToken),
   /** Dev/test only — stands in for the real payment processor calling our webhook after a completed charge. */
   simulateMockPayment: (providerOrderId: string) =>
     request<{ status: string }>('/payments/webhooks', {
