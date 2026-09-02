@@ -15,12 +15,6 @@ export class TenantPacketsController {
     return this.tenantPacketsService.getOrCreateMine(user);
   }
 
-  @Post('checkout')
-  @AuditLog('tenant_packet.checkout', 'TenantPacket')
-  createCheckout(@CurrentUser() user: AuthenticatedUser) {
-    return this.tenantPacketsService.createCheckout(user);
-  }
-
   @Post('submit')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   @AuditLog('tenant_packet.submit', 'TenantPacket')

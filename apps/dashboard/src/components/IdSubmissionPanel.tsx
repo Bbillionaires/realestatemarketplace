@@ -5,15 +5,10 @@ import { IdSubmissionSummary } from '../lib/api';
 import { theme } from '../lib/theme';
 
 const STATUS_LABEL: Record<string, string> = {
-  AWAITING_PAYMENT: 'Awaiting the $5 convenience fee',
-  PAID: 'Fee paid — ready to submit ID',
+  PAID: 'Ready to submit ID',
   SUBMITTED: 'ID submitted',
   CANCELLED: 'Cancelled',
 };
-
-function formatFee(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 export function IdSubmissionPanel({
   submission,
@@ -82,7 +77,7 @@ export function IdSubmissionPanel({
         <strong style={{ fontSize: 13 }}>
           {isOpen ? STATUS_LABEL[submission!.status] ?? submission!.status : 'Submit ID to the landlord'}
         </strong>
-        {isOpen && submission!.status === 'AWAITING_PAYMENT' && (
+        {isOpen && submission!.status === 'PAID' && (
           <button
             onClick={() => onCancel(submission!.id)}
             style={{ border: 'none', background: 'none', color: theme.danger, fontSize: 12, cursor: 'pointer' }}
@@ -95,39 +90,16 @@ export function IdSubmissionPanel({
       {!isOpen && (
         <div style={{ marginTop: 10 }}>
           <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 0 }}>
-            Send your ID directly to the landlord/property manager through the platform for a $5 convenience fee,
-            instead of exchanging contact info off-platform.
+            Send your ID directly to the landlord/property manager through the platform, instead of exchanging
+            contact info off-platform.
           </p>
           <button
             onClick={handleStart}
             disabled={busy}
             style={{ border: 'none', background: theme.primary, color: 'white', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}
           >
-            Submit ID ($5 fee)
+            Submit ID
           </button>
-        </div>
-      )}
-
-      {isOpen && submission!.status === 'AWAITING_PAYMENT' && (
-        <div style={{ marginTop: 10 }}>
-          <p style={{ fontSize: 12, color: theme.textMuted, marginTop: 0 }}>
-            Pay the {formatFee(submission!.feeCents)} convenience fee to continue.
-          </p>
-          <a
-            href={submission!.checkoutUrl ?? '#'}
-            style={{
-              display: 'inline-block',
-              border: 'none',
-              background: theme.primary,
-              color: 'white',
-              borderRadius: 6,
-              padding: '6px 12px',
-              fontSize: 12,
-              textDecoration: 'none',
-            }}
-          >
-            Pay {formatFee(submission!.feeCents)}
-          </a>
         </div>
       )}
 

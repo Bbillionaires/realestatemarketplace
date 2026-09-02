@@ -572,15 +572,12 @@ export interface AdminNoteSummary {
   createdAt: string;
 }
 
-export type IdSubmissionStatus = 'AWAITING_PAYMENT' | 'PAID' | 'SUBMITTED' | 'CANCELLED';
+export type IdSubmissionStatus = 'PAID' | 'SUBMITTED' | 'CANCELLED';
 
 export interface IdSubmissionSummary {
   id: string;
   conversationId: string;
-  feeCents: number;
   status: IdSubmissionStatus;
-  checkoutUrl: string | null;
-  paidAt: string | null;
   submittedFileName: string | null;
   emailSent: boolean;
   submittedAt: string | null;
@@ -602,7 +599,7 @@ export interface HqsInspectionSummary {
   createdAt: string;
 }
 
-export type TenantPacketStatus = 'NOT_STARTED' | 'AWAITING_PAYMENT' | 'PAID' | 'SUBMITTED';
+export type TenantPacketStatus = 'PAID' | 'SUBMITTED';
 
 export interface TenantPacketReferenceContact {
   id: string;
@@ -613,11 +610,8 @@ export interface TenantPacketReferenceContact {
 }
 
 export interface TenantPacketSummary {
-  id: string | null;
-  feeCents: number;
+  id: string;
   status: TenantPacketStatus;
-  checkoutUrl: string | null;
-  paidAt: string | null;
   incomeProofFileName: string | null;
   backgroundExplanation: string | null;
   references: string | null;
@@ -933,8 +927,6 @@ export const api = {
       accessToken,
     ),
   getTenantPacket: (accessToken: string) => request<TenantPacketSummary>('/tenant-packet/me', {}, accessToken),
-  createTenantPacketCheckout: (accessToken: string) =>
-    request<TenantPacketSummary>('/tenant-packet/checkout', { method: 'POST' }, accessToken),
   submitTenantPacket: (
     accessToken: string,
     payload: {

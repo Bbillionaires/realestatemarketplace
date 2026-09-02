@@ -55,23 +55,6 @@ export default function TenantPacketPage() {
     setReferenceRows((rows) => rows.filter((_, i) => i !== index));
   }
 
-  async function startCheckout() {
-    if (!accessToken) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = await api.createTenantPacketCheckout(accessToken);
-      if (updated.checkoutUrl) {
-        window.location.href = updated.checkoutUrl;
-      } else {
-        setPacket(updated);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start checkout');
-      setBusy(false);
-    }
-  }
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!accessToken) return;
@@ -96,45 +79,20 @@ export default function TenantPacketPage() {
     }
   }
 
-  const canFillOut = packet && (packet.status === 'PAID' || packet.status === 'SUBMITTED');
-
   return (
     <main style={{ minHeight: '100vh', background: theme.bg }}>
       <NavBar />
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '32px 24px 60px' }}>
         <h1 style={{ fontSize: 22, color: theme.text, marginBottom: 4 }}>Fast-Track Profile Packet</h1>
         <p style={{ color: theme.textMuted, fontSize: 14, marginTop: 0, marginBottom: 20 }}>
-          Pay a one-time $29 fee, fill this out once, then share it with any landlord you message on the platform —
+          Fill this out once, then share it with any landlord you message on the platform —
           no need to retype your income proof, background explanation, and references for every application.
         </p>
 
         {loading && <p style={{ color: theme.textMuted }}>Loading...</p>}
         {error && <p style={{ color: theme.danger, fontSize: 13 }}>{error}</p>}
 
-        {!loading && packet?.status === 'NOT_STARTED' && (
-          <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 24 }}>
-            <button
-              onClick={startCheckout}
-              disabled={busy}
-              style={{ padding: '12px 20px', borderRadius: 8, border: 'none', background: theme.primary, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
-            >
-              {busy ? 'Starting checkout...' : 'Get started ($29)'}
-            </button>
-          </div>
-        )}
-
-        {!loading && packet?.status === 'AWAITING_PAYMENT' && (
-          <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 24 }}>
-            <a
-              href={packet.checkoutUrl ?? '#'}
-              style={{ display: 'inline-block', padding: '12px 20px', borderRadius: 8, background: theme.primary, color: 'white', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}
-            >
-              Pay ${(packet.feeCents / 100).toFixed(2)}
-            </a>
-          </div>
-        )}
-
-        {!loading && canFillOut && (
+        {!loading && packet && (
           <form
             onSubmit={onSubmit}
             style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: theme.radius, boxShadow: theme.shadow, padding: 24, display: 'grid', gap: 14 }}

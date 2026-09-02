@@ -1,17 +1,13 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { IdSubmissionStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { AppConfig } from '../config/configuration';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
 import { EMAIL_PROVIDER } from '../email/email.constants';
 import { EmailProvider } from '../email/interfaces/email-provider.interface';
-import { PAYMENT_PROVIDER } from '../payments/payments.constants';
-import { PaymentProvider } from '../payments/interfaces/payment-provider.interface';
 import { IdSubmissionResponseDto } from './dto/id-submission-response.dto';
 
 const STAFF_ROLES: Role[] = [Role.STAFF_MODERATOR, Role.ADMINISTRATOR, Role.SUPER_ADMINISTRATOR];
-const OPEN_STATUSES: IdSubmissionStatus[] = [IdSubmissionStatus.AWAITING_PAYMENT, IdSubmissionStatus.PAID];
+const OPEN_STATUSES: IdSubmissionStatus[] = [IdSubmissionStatus.PAID];
 
 const CONVERSATION_INCLUDE = {
   property: { select: { title: true } },
@@ -29,8 +25,6 @@ export interface SubmittedIdFile {
 export class IdSubmissionsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly configService: ConfigService<AppConfig>,
-    @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
     @Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider,
   ) {}
 
@@ -60,7 +54,7 @@ export class IdSubmissionsService {
   }
 
   async create(actor: AuthenticatedUser, conversationId: string): Promise<IdSubmissionResponseDto> {
-    const conversation = await this.getConversationForTenant(actor, conversationId);
+    await this.getConversationForTenant(actor, conversationId);
 
     const existing = await this.prisma.idSubmission.findFirst({
       where: { conversationId, status: { in: OPEN_STATUSES } },
@@ -70,28 +64,10 @@ export class IdSubmissionsService {
       return IdSubmissionResponseDto.from(existing);
     }
 
-    const feeCents = this.configService.get('idSubmissionFeeCents', { infer: true }) as number;
     const submission = await this.prisma.idSubmission.create({
-      data: { conversationId, feeCents },
+      data: { conversationId, feeCents: 0, status: IdSubmissionStatus.PAID },
     });
-
-    const dashboardBaseUrl = this.configService.get('dashboardBaseUrl', { infer: true });
-    const checkout = await this.paymentProvider.createCheckout({
-      amountCents: feeCents,
-      description: `ID verification fee — ${conversation.property.title}`,
-      referenceId: submission.id,
-      redirectUrl: `${dashboardBaseUrl}/conversations/${conversationId}?idSubmissionPaid=1`,
-    });
-
-    const updated = await this.prisma.idSubmission.update({
-      where: { id: submission.id },
-      data: {
-        paymentProviderCheckoutId: checkout.providerCheckoutId,
-        paymentOrderId: checkout.providerOrderId,
-        checkoutUrl: checkout.checkoutUrl,
-      },
-    });
-    return IdSubmissionResponseDto.from(updated);
+    return IdSubmissionResponseDto.from(submission);
   }
 
   async listForConversation(actor: AuthenticatedUser, conversationId: string): Promise<IdSubmissionResponseDto[]> {
@@ -138,7 +114,7 @@ export class IdSubmissionsService {
       throw new BadRequestException(
         submission.status === IdSubmissionStatus.SUBMITTED
           ? 'This ID has already been submitted'
-          : 'The convenience fee must be paid before submitting an ID',
+          : 'This submission has been cancelled',
       );
     }
 
@@ -163,29 +139,5 @@ export class IdSubmissionsService {
       },
     });
     return IdSubmissionResponseDto.from(updated);
-  }
-
-  async handlePaymentWebhook(signature: string, url: string, rawBody: string): Promise<void> {
-    const valid = this.paymentProvider.validateWebhook({ signature, url, rawBody });
-    if (!valid) {
-      throw new BadRequestException('Invalid webhook signature');
-    }
-
-    const event = this.paymentProvider.parseWebhookEvent(rawBody);
-    if (!event || !event.paid) {
-      return;
-    }
-
-    const submission = await this.prisma.idSubmission.findFirst({
-      where: { paymentOrderId: event.providerOrderId, status: IdSubmissionStatus.AWAITING_PAYMENT },
-    });
-    if (!submission) {
-      return;
-    }
-
-    await this.prisma.idSubmission.update({
-      where: { id: submission.id },
-      data: { status: IdSubmissionStatus.PAID, paidAt: new Date() },
-    });
   }
 }

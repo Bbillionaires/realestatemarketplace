@@ -17,13 +17,13 @@ interface SquarePaymentLinkResponse {
 }
 
 /**
- * Square Payment Links API — a $5 fixed-fee purchase doesn't need our own
- * card-tokenization UI, so this hands the buyer a Square-hosted checkout
- * page (which also offers Cash App Pay, Apple Pay, Google Pay alongside
- * cards, depending on what's enabled on the Square account) and relies on
- * the `payment.updated` webhook to confirm payment, matched back to our
- * IdSubmission record by `order_id` (stored as paymentOrderId at checkout
- * creation time).
+ * Square Payment Links API — a flat-fee purchase (e.g. the HQS inspection
+ * fee) doesn't need our own card-tokenization UI, so this hands the buyer a
+ * Square-hosted checkout page (which also offers Cash App Pay, Apple Pay,
+ * Google Pay alongside cards, depending on what's enabled on the Square
+ * account) and relies on the `payment.updated` webhook to confirm payment,
+ * matched back to our record by `order_id` (stored as paymentOrderId at
+ * checkout creation time).
  *
  * NOTE: written against Square's documented Payment Links + Webhooks APIs
  * but not exercised against a live Square (sandbox or production) account —
