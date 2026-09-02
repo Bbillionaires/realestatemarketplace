@@ -47,7 +47,10 @@ export class VoucherDocumentsService {
     const doc = await this.prisma.voucherDocument.upsert({
       where: { tenantId: actor.id },
       create: { tenantId: actor.id, fileName: file.originalname, mimeType: file.mimetype, fileData: file.buffer },
-      update: { fileName: file.originalname, mimeType: file.mimetype, fileData: file.buffer },
+      // uploadedAt's `@default(now())` only fires on insert — Prisma never
+      // re-applies it on an update, so a replace must set it explicitly or
+      // the displayed/sorted date would stay frozen at the first-ever upload.
+      update: { fileName: file.originalname, mimeType: file.mimetype, fileData: file.buffer, uploadedAt: new Date() },
       select: { fileName: true, mimeType: true, uploadedAt: true },
     });
     return VoucherDocumentResponseDto.from(doc);
