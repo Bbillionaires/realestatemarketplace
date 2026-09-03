@@ -1,5 +1,5 @@
 import { plainToInstance, Transform, Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsEmail, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsEmail, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 
 export class ApplicationOccupantDto {
   @IsString()
@@ -66,12 +66,6 @@ function parseJsonArray(dtoClass: new () => object) {
   };
 }
 
-/** Multipart booleans arrive as the strings "true"/"false", not real booleans. */
-function parseBoolean({ value }: { value: unknown }): unknown {
-  if (typeof value === 'string') return value === 'true';
-  return value;
-}
-
 export class UpdateApplicationDto {
   // Identity — no SSN field, ever.
   @IsOptional() @IsString() @MaxLength(200) fullLegalName?: string;
@@ -97,14 +91,21 @@ export class UpdateApplicationDto {
   // Current housing
   @IsOptional() @IsString() @MaxLength(500) reasonForMoving?: string;
 
-  // Pets & vehicles
-  @IsOptional() @Transform(parseBoolean) @IsBoolean() hasPets?: boolean;
+  // Pets & vehicles.
+  // Typed `boolean | string` rather than coerced to boolean here: with the
+  // global ValidationPipe's `enableImplicitConversion: true`, class-transformer's
+  // own implicit Boolean() coercion for a `boolean`-typed property runs
+  // *after* a custom @Transform and stomps on it — Boolean('false') is
+  // `true`, silently flipping every explicit "false" sent by a multipart
+  // form. Normalizing the raw string in the service (see toBoolean()) avoids
+  // that interaction entirely.
+  @IsOptional() hasPets?: boolean | string;
   @IsOptional() @IsString() @MaxLength(500) petDetails?: string;
-  @IsOptional() @Transform(parseBoolean) @IsBoolean() hasVehicles?: boolean;
+  @IsOptional() hasVehicles?: boolean | string;
   @IsOptional() @IsString() @MaxLength(500) vehicleDetails?: string;
 
   // Guarantor / co-signer
-  @IsOptional() @Transform(parseBoolean) @IsBoolean() hasGuarantor?: boolean;
+  @IsOptional() hasGuarantor?: boolean | string;
   @IsOptional() @IsString() @MaxLength(200) guarantorFullName?: string;
   @IsOptional() @IsString() @MaxLength(50) guarantorPhone?: string;
   @IsOptional() @IsEmail() guarantorEmail?: string;

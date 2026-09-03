@@ -19,6 +19,18 @@ const REOPENABLE_STATUSES: ApplicationStatus[] = [
   ApplicationStatus.DENIED,
 ];
 
+/**
+ * Multipart form booleans arrive as the strings "true"/"false". Normalized
+ * here rather than via a DTO `@Transform` — the global ValidationPipe's
+ * `enableImplicitConversion` applies its own `Boolean(value)` coercion to a
+ * `boolean`-typed property *after* a custom `@Transform` runs, and
+ * `Boolean('false')` is `true`, silently flipping every explicit "false".
+ */
+function toBoolean(value: boolean | string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  return value === true || value === 'true';
+}
+
 const APPLICATION_INCLUDE = {
   occupants: true,
   rentalHistory: true,
@@ -148,11 +160,11 @@ export class ApplicationsService {
         otherIncomeCents: dto.otherIncomeCents ?? application.otherIncomeCents,
         otherIncomeNote: dto.otherIncomeNote ?? application.otherIncomeNote,
         reasonForMoving: dto.reasonForMoving ?? application.reasonForMoving,
-        hasPets: dto.hasPets ?? application.hasPets,
+        hasPets: toBoolean(dto.hasPets) ?? application.hasPets,
         petDetails: dto.petDetails ?? application.petDetails,
-        hasVehicles: dto.hasVehicles ?? application.hasVehicles,
+        hasVehicles: toBoolean(dto.hasVehicles) ?? application.hasVehicles,
         vehicleDetails: dto.vehicleDetails ?? application.vehicleDetails,
-        hasGuarantor: dto.hasGuarantor ?? application.hasGuarantor,
+        hasGuarantor: toBoolean(dto.hasGuarantor) ?? application.hasGuarantor,
         guarantorFullName: dto.guarantorFullName ?? application.guarantorFullName,
         guarantorPhone: dto.guarantorPhone ?? application.guarantorPhone,
         guarantorEmail: dto.guarantorEmail ?? application.guarantorEmail,
