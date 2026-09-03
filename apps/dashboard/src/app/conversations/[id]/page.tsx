@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, ConversationSummary, IdSubmissionSummary, MessageSummary, ShowingSummary, TenantScreeningSummary, VoucherAccessRequestSummary } from '../../../lib/api';
+import { api, ApplicationSummary, ConversationSummary, IdSubmissionSummary, MessageSummary, ShowingSummary, TenantScreeningSummary, VoucherAccessRequestSummary } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth-context';
 import { useCurrentUser } from '../../../lib/use-current-user';
 import { useConversationSocket } from '../../../lib/use-conversation-socket';
@@ -31,6 +31,7 @@ export default function ConversationThreadPage() {
   const [idSubmission, setIdSubmission] = useState<IdSubmissionSummary | null>(null);
   const [voucherAccessRequest, setVoucherAccessRequest] = useState<VoucherAccessRequestSummary | null>(null);
   const [tenantScreening, setTenantScreening] = useState<TenantScreeningSummary | null>(null);
+  const [application, setApplication] = useState<ApplicationSummary | null>(null);
   const [packetShareBusy, setPacketShareBusy] = useState(false);
   const [packetShareError, setPacketShareError] = useState<string | null>(null);
   const [packetShared, setPacketShared] = useState(false);
@@ -45,13 +46,14 @@ export default function ConversationThreadPage() {
 
   const refresh = useCallback(async () => {
     if (!accessToken) return;
-    const [conv, msgs, showings, idSubmissions, voucherRequest, screening] = await Promise.all([
+    const [conv, msgs, showings, idSubmissions, voucherRequest, screening, app] = await Promise.all([
       api.getConversation(accessToken, id),
       api.listMessages(accessToken, id),
       api.listShowings(accessToken, id),
       api.listIdSubmissions(accessToken, id),
       api.getVoucherAccessRequest(accessToken, id),
       api.getConversationTenantScreening(accessToken, id),
+      api.getApplication(accessToken, id),
     ]);
     setConversation(conv);
     setMessages(msgs);
@@ -59,6 +61,7 @@ export default function ConversationThreadPage() {
     setIdSubmission(idSubmissions.find((s) => s.status !== 'CANCELLED') ?? null);
     setVoucherAccessRequest(voucherRequest);
     setTenantScreening(screening);
+    setApplication(app);
   }, [accessToken, id]);
 
   useEffect(() => {
@@ -293,6 +296,18 @@ export default function ConversationThreadPage() {
             onScreeningChange={setTenantScreening}
           />
         )}
+
+        <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 10, padding: 14, marginTop: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong style={{ fontSize: 13 }}>Rental Application</strong>
+            <Link href={`/conversations/${id}/apply`} style={{ color: theme.primary, fontWeight: 600, fontSize: 13 }}>
+              {application?.status ? 'View →' : 'Start →'}
+            </Link>
+          </div>
+          {application?.status && (
+            <p style={{ fontSize: 12, color: theme.textMuted, margin: '4px 0 0' }}>Status: {application.status}</p>
+          )}
+        </div>
 
         {isTenantView && (
           <div style={{ background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 10, padding: 14, marginTop: 12 }}>

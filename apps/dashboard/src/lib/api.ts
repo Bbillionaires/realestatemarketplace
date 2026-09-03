@@ -26,13 +26,18 @@ async function request<T>(path: string, options: RequestInit = {}, accessToken?:
 
 /** Like request(), but sends a FormData body (no Content-Type set manually — the
  * browser adds the multipart boundary) for endpoints that accept a file upload. */
-async function requestMultipart<T>(path: string, formData: FormData, accessToken?: string): Promise<T> {
+async function requestMultipart<T>(
+  path: string,
+  formData: FormData,
+  accessToken?: string,
+  method: 'POST' | 'PATCH' = 'POST',
+): Promise<T> {
   const headers: Record<string, string> = {};
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
   }
 
-  const res = await fetch(`${API_BASE_URL}/api${path}`, { method: 'POST', body: formData, headers });
+  const res = await fetch(`${API_BASE_URL}/api${path}`, { method, body: formData, headers });
   const body = await res.json().catch(() => undefined);
 
   if (!res.ok) {
@@ -168,6 +173,7 @@ export interface PropertySummary {
   cosignerAccepted: boolean;
   noCreditCheckIncomeOnly: boolean;
   evictionAgeToleranceYears: number | null;
+  applicationFeeCents: number | null;
   hasRoomRentals: boolean;
   hqsPreInspected: boolean;
   boostedUntil: string | null;
@@ -231,6 +237,7 @@ export interface UpdatePropertyPayload {
   cosignerAccepted?: boolean;
   noCreditCheckIncomeOnly?: boolean;
   evictionAgeToleranceYears?: number;
+  applicationFeeCents?: number;
 }
 
 export interface CreatePropertyPayload {
@@ -261,6 +268,7 @@ export interface CreatePropertyPayload {
   cosignerAccepted?: boolean;
   noCreditCheckIncomeOnly?: boolean;
   evictionAgeToleranceYears?: number;
+  applicationFeeCents?: number;
 }
 
 export interface CreateUnitPayload {
@@ -719,6 +727,134 @@ export interface RegistrantOverviewRow {
   latestScreening: { kind: TenantScreeningKind; status: TenantScreeningStatus; expiresAt: string | null } | null;
 }
 
+export type ApplicationStatus = 'NOT_STARTED' | 'STARTED' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'DENIED' | 'WITHDRAWN';
+
+export interface ApplicationOccupant {
+  id: string;
+  name: string;
+  relationship: string | null;
+}
+
+export interface ApplicationRentalHistoryEntry {
+  id: string;
+  addressLine1: string;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  landlordName: string | null;
+  landlordPhone: string | null;
+  landlordEmail: string | null;
+  monthlyRentCents: number | null;
+  moveInDate: string | null;
+  moveOutDate: string | null;
+  reasonForLeaving: string | null;
+}
+
+export interface ApplicationReference {
+  id: string;
+  name: string;
+  relationship: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
+export interface ApplicationSummary {
+  id: string | null;
+  conversationId: string;
+  status: ApplicationStatus | null;
+  submittedAt: string | null;
+  decisionAt: string | null;
+  decisionBy: string | null;
+  notes: string | null;
+
+  fullLegalName: string | null;
+  dateOfBirth: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  currentAddressLine1: string | null;
+  currentAddressLine2: string | null;
+  currentCity: string | null;
+  currentState: string | null;
+  currentZip: string | null;
+
+  employerName: string | null;
+  employerPhone: string | null;
+  position: string | null;
+  employmentStartDate: string | null;
+  monthlyIncomeCents: number | null;
+  otherIncomeCents: number | null;
+  otherIncomeNote: string | null;
+  incomeProofFileName: string | null;
+
+  reasonForMoving: string | null;
+
+  hasPets: boolean;
+  petDetails: string | null;
+  hasVehicles: boolean;
+  vehicleDetails: string | null;
+
+  hasGuarantor: boolean;
+  guarantorFullName: string | null;
+  guarantorPhone: string | null;
+  guarantorEmail: string | null;
+  guarantorMonthlyIncomeCents: number | null;
+
+  feeCents: number | null;
+  checkoutUrl: string | null;
+  paidAt: string | null;
+
+  occupants: ApplicationOccupant[];
+  rentalHistory: ApplicationRentalHistoryEntry[];
+  references: ApplicationReference[];
+
+  createdAt: string | null;
+}
+
+export interface UpdateApplicationPayload {
+  fullLegalName?: string;
+  dateOfBirth?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  currentAddressLine1?: string;
+  currentAddressLine2?: string;
+  currentCity?: string;
+  currentState?: string;
+  currentZip?: string;
+  employerName?: string;
+  employerPhone?: string;
+  position?: string;
+  employmentStartDate?: string;
+  monthlyIncomeCents?: number;
+  otherIncomeCents?: number;
+  otherIncomeNote?: string;
+  reasonForMoving?: string;
+  hasPets?: boolean;
+  petDetails?: string;
+  hasVehicles?: boolean;
+  vehicleDetails?: string;
+  hasGuarantor?: boolean;
+  guarantorFullName?: string;
+  guarantorPhone?: string;
+  guarantorEmail?: string;
+  guarantorMonthlyIncomeCents?: number;
+  occupants?: { name: string; relationship?: string }[];
+  rentalHistory?: {
+    addressLine1: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    landlordName?: string;
+    landlordPhone?: string;
+    landlordEmail?: string;
+    monthlyRentCents?: number;
+    moveInDate?: string;
+    moveOutDate?: string;
+    reasonForLeaving?: string;
+  }[];
+  references?: { name: string; relationship?: string; phone?: string; email?: string }[];
+  incomeProofFile?: File;
+}
+
 export interface StartConversationResult {
   conversation: ConversationSummary;
   message: MessageSummary;
@@ -1117,6 +1253,38 @@ export const api = {
     request<TenantScreeningAdminSummary>(`/tenant-screenings/admin/${id}/cancel`, { method: 'PATCH' }, accessToken),
   listRegistrantOverview: (accessToken: string, skip = 0, take = 50) =>
     request<RegistrantOverviewRow[]>(`/users/admin/overview?skip=${skip}&take=${take}`, {}, accessToken),
+  createApplication: (accessToken: string, conversationId: string) =>
+    request<ApplicationSummary>(`/conversations/${conversationId}/applications`, { method: 'POST' }, accessToken),
+  getApplication: (accessToken: string, conversationId: string) =>
+    request<ApplicationSummary>(`/conversations/${conversationId}/applications`, {}, accessToken),
+  updateApplication: (accessToken: string, conversationId: string, payload: UpdateApplicationPayload) => {
+    const { occupants, rentalHistory, references, incomeProofFile, ...rest } = payload;
+    const formData = new FormData();
+    Object.entries(rest).forEach(([key, value]) => {
+      if (value !== undefined) formData.set(key, String(value));
+    });
+    if (occupants) formData.set('occupants', JSON.stringify(occupants));
+    if (rentalHistory) formData.set('rentalHistory', JSON.stringify(rentalHistory));
+    if (references) formData.set('references', JSON.stringify(references));
+    if (incomeProofFile) formData.set('file', incomeProofFile);
+    return requestMultipart<ApplicationSummary>(`/conversations/${conversationId}/applications`, formData, accessToken, 'PATCH');
+  },
+  payApplicationFee: (accessToken: string, conversationId: string) =>
+    request<ApplicationSummary>(`/conversations/${conversationId}/applications/pay`, { method: 'POST' }, accessToken),
+  submitApplication: (accessToken: string, conversationId: string) =>
+    request<ApplicationSummary>(`/conversations/${conversationId}/applications/submit`, { method: 'POST' }, accessToken),
+  withdrawApplication: (accessToken: string, conversationId: string) =>
+    request<ApplicationSummary>(`/conversations/${conversationId}/applications/withdraw`, { method: 'PATCH' }, accessToken),
+  downloadApplicationIncomeProof: (accessToken: string, conversationId: string) =>
+    downloadFile(`/conversations/${conversationId}/applications/income-proof`, accessToken),
+  markApplicationUnderReview: (accessToken: string, id: string) =>
+    request<ApplicationSummary>(`/applications/${id}/mark-under-review`, { method: 'PATCH' }, accessToken),
+  decideApplication: (accessToken: string, id: string, decision: 'APPROVED' | 'DENIED', notes?: string) =>
+    request<ApplicationSummary>(
+      `/applications/${id}/decision`,
+      { method: 'PATCH', body: JSON.stringify({ decision, notes }) },
+      accessToken,
+    ),
   /** Dev/test only — stands in for the real payment processor calling our webhook after a completed charge. */
   simulateMockPayment: (providerOrderId: string) =>
     request<{ status: string }>('/payments/webhooks', {

@@ -1,4 +1,4 @@
-import { Transform, Type } from 'class-transformer';
+import { plainToInstance, Transform, Type } from 'class-transformer';
 import { IsArray, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 
 export class TenantPacketReferenceDto {
@@ -47,11 +47,18 @@ export class SubmitTenantPacketDto {
 
   // Arrives as a JSON-encoded string in the multipart form (alongside the
   // income-proof file upload), so it needs parsing before validation runs.
+  // Elements are converted into real TenantPacketReferenceDto instances here
+  // (via plainToInstance) rather than relying on @Type()'s own array-element
+  // conversion — @Type() + enableImplicitConversion doesn't reliably finish
+  // converting plain-object array elements into class instances before
+  // class-validator's nested forbidNonWhitelisted check runs, which
+  // otherwise rejects every property on every element as unknown.
   @IsOptional()
   @Transform(({ value }) => {
     if (typeof value !== 'string') return value;
     try {
-      return JSON.parse(value);
+      const parsed: unknown = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.map((item) => plainToInstance(TenantPacketReferenceDto, item)) : parsed;
     } catch {
       // Let @IsArray() below reject this cleanly rather than throwing here.
       return value;

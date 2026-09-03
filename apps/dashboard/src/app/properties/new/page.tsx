@@ -57,6 +57,7 @@ export default function NewPropertyPage() {
   const [cosignerAccepted, setCosignerAccepted] = useState(false);
   const [noCreditCheckIncomeOnly, setNoCreditCheckIncomeOnly] = useState(false);
   const [evictionAgeToleranceYears, setEvictionAgeToleranceYears] = useState('');
+  const [applicationFeeCents, setApplicationFeeCents] = useState('');
   const [bedrooms, setBedrooms] = useState('');
   const [bathrooms, setBathrooms] = useState('');
   const [squareFeet, setSquareFeet] = useState('');
@@ -114,6 +115,7 @@ export default function NewPropertyPage() {
         cosignerAccepted,
         noCreditCheckIncomeOnly,
         evictionAgeToleranceYears: evictionAgeToleranceYears.trim() ? parseInt(evictionAgeToleranceYears, 10) : undefined,
+        applicationFeeCents: applicationFeeCents.trim() ? Math.round(Number(applicationFeeCents) * 100) : undefined,
         amenities: amenities || undefined,
         utilitiesIncluded: utilitiesIncluded.length > 0 ? utilitiesIncluded : undefined,
         sewerSource: sewerSource || undefined,
@@ -426,6 +428,18 @@ export default function NewPropertyPage() {
               max={50}
               value={evictionAgeToleranceYears}
               onChange={(e) => setEvictionAgeToleranceYears(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+          <label style={labelStyle}>
+            Application fee, tenant-paid (optional — leave blank for a free application)
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={applicationFeeCents}
+              onChange={(e) => setApplicationFeeCents(e.target.value)}
+              placeholder="e.g. 35"
               style={inputStyle}
             />
           </label>

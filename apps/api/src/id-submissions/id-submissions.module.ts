@@ -5,12 +5,21 @@ import { PropertiesModule } from '../properties/properties.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { HqsInspectionsModule } from '../hqs-inspections/hqs-inspections.module';
 import { TenantScreeningsModule } from '../tenant-screenings/tenant-screenings.module';
+import { ApplicationsModule } from '../applications/applications.module';
 import { IdSubmissionsController, IdSubmissionActionsController } from './id-submissions.controller';
 import { PaymentWebhooksController } from './payment-webhooks.controller';
 import { IdSubmissionsService } from './id-submissions.service';
 
 @Module({
-  imports: [GigJobsModule, JobReferralsModule, PropertiesModule, SubscriptionsModule, HqsInspectionsModule, TenantScreeningsModule],
+  imports: [
+    GigJobsModule,
+    JobReferralsModule,
+    PropertiesModule,
+    SubscriptionsModule,
+    HqsInspectionsModule,
+    TenantScreeningsModule,
+    ApplicationsModule,
+  ],
   controllers: [IdSubmissionsController, IdSubmissionActionsController, PaymentWebhooksController],
   providers: [IdSubmissionsService],
 })

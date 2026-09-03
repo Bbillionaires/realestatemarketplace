@@ -365,6 +365,7 @@ model User {
   voucherDocument       VoucherDocument?
   tenantScreenings          TenantScreening[] @relation("TenantScreeningSubject")
   tenantScreeningsInitiated TenantScreening[] @relation("TenantScreeningInitiator")
+  applications              Application[]
 
   @@index([role])
 }
@@ -519,6 +520,8 @@ model Property {
   noCreditCheckIncomeOnly   Boolean @default(false)
   // Landlord-stated "evictions older than N years OK"; null = not stated.
   evictionAgeToleranceYears Int?
+  // Landlord-optional application fee, tenant-paid — null/0 means free to apply.
+  applicationFeeCents       Int?
 
   // "Featured Listing Boost": a flat one-time fee that surfaces this
   // property first in search results for 30 days. `boostedUntil` in the
@@ -549,6 +552,7 @@ model Property {
   nearbySchools       NearbySchool[]
   gigJobs             GigJob[]
   hqsInspectionRequests HqsInspectionRequest[]
+  applications        Application[]
 
   @@index([ownerId])
   @@index([city, state])
@@ -1380,12 +1384,21 @@ model JobReferralClick {
 // Applications / Leases (Phase 4)
 // ---------------------------------------------------------------------------
 
+// A formal rental application to one specific property, tied 1:1 to the
+// Conversation it was started from. Distinct from TenantPacket (a free,
+// reusable, share-anywhere profile) — this is a per-property submission with
+// a landlord decision workflow. Deliberately does NOT collect SSN anywhere:
+// Tenant Screening (background/credit/eviction) is handled entirely by the
+// separate TenantScreening flow, and ID verification by the separate
+// IdSubmission flow, both already scoped to this same Conversation.
 model Application {
   id             String            @id @default(uuid())
-  conversationId String
+  conversationId String            @unique
   conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   tenantId       String
+  tenant         User              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   propertyId     String
+  property       Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   unitId         String?
   unit           PropertyUnit?     @relation(fields: [unitId], references: [id])
   bedId          String?
@@ -1395,11 +1408,109 @@ model Application {
   decisionAt     DateTime?
   decisionBy     String?
   notes          String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+
+  // Identity — no SSN, ever.
+  fullLegalName       String?
+  dateOfBirth         String?
+  contactPhone        String?
+  contactEmail        String?
+  currentAddressLine1 String?
+  currentAddressLine2 String?
+  currentCity         String?
+  currentState        String?
+  currentZip          String?
+
+  // Employment & income
+  employerName        String?
+  employerPhone       String?
+  position            String?
+  employmentStartDate String?
+  monthlyIncomeCents  Int?
+  otherIncomeCents    Int?
+  otherIncomeNote     String?
+  incomeProofFileName String?
+  incomeProofMimeType String?
+  incomeProofFile     Bytes?
+
+  // Current housing / reason for moving
+  reasonForMoving String?
+
+  // Pets & vehicles — free text, mirrors Property.petPolicy's own convention.
+  hasPets        Boolean @default(false)
+  petDetails     String?
+  hasVehicles    Boolean @default(false)
+  vehicleDetails String?
+
+  // Guarantor / co-signer — lightweight contact + income, not a full parallel application.
+  hasGuarantor                Boolean @default(false)
+  guarantorFullName           String?
+  guarantorPhone              String?
+  guarantorEmail              String?
+  guarantorMonthlyIncomeCents Int?
+
+  // Application fee (landlord-optional, tenant-paid) — same Square checkout
+  // shape as TenantScreening/HqsInspectionRequest.
+  feeCents                  Int?
+  paymentProviderCheckoutId String?
+  paymentOrderId            String?
+  checkoutUrl               String?
+  paidAt                    DateTime?
+
+  occupants     ApplicationOccupant[]
+  rentalHistory ApplicationRentalHistoryEntry[]
+  references    ApplicationReference[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([conversationId])
   @@index([tenantId])
+  @@index([paymentOrderId])
+}
+
+// Other adults/occupants who will live in the unit. Deliberately no age
+// field — the user's own spec only asked for "other adults/occupants," and
+// collecting minors' ages is a familial-status Fair Housing Act risk if a
+// landlord could see and misuse it.
+model ApplicationOccupant {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  name          String
+  relationship  String?
+
+  @@index([applicationId])
+}
+
+model ApplicationRentalHistoryEntry {
+  id               String      @id @default(uuid())
+  applicationId    String
+  application      Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  addressLine1     String
+  city             String?
+  state            String?
+  zip              String?
+  landlordName     String?
+  landlordPhone    String?
+  landlordEmail    String?
+  monthlyRentCents Int?
+  moveInDate       String?
+  moveOutDate      String?
+  reasonForLeaving String?
+
+  @@index([applicationId])
+}
+
+model ApplicationReference {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  name          String
+  relationship  String?
+  phone         String?
+  email         String?
+
+  @@index([applicationId])
 }
 
 model Lease {

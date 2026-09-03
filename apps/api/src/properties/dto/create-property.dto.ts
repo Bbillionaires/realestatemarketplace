@@ -158,4 +158,11 @@ export class CreatePropertyDto {
   @Min(0)
   @Max(50)
   evictionAgeToleranceYears?: number;
+
+  /** Optional fee, tenant-paid, charged to submit a rental application. Null/omitted = free. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100_000_00)
+  applicationFeeCents?: number;
 }

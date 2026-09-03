@@ -638,6 +638,10 @@ export default function PropertyDetailPage() {
                     <dd style={{ margin: 0 }}>{property.cosignerAccepted ? 'Accepted' : 'Not specified'}</dd>
                     <dt style={{ color: theme.textMuted }}>Credit check</dt>
                     <dd style={{ margin: 0 }}>{property.noCreditCheckIncomeOnly ? 'Not required — income only' : 'Not specified'}</dd>
+                    <dt style={{ color: theme.textMuted }}>Application fee</dt>
+                    <dd style={{ margin: 0 }}>
+                      {property.applicationFeeCents ? `$${(property.applicationFeeCents / 100).toFixed(2)}` : 'Free to apply'}
+                    </dd>
                     <dt style={{ color: theme.textMuted }}>Rent-to-Own</dt>
                     <dd style={{ margin: 0 }}>{property.rentToOwnAvailable ? 'Available' : 'Not offered'}</dd>
                     <dt style={{ color: theme.textMuted }}>Lease-to-Own</dt>

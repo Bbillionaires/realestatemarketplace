@@ -100,6 +100,7 @@ export class PropertyResponseDto {
   cosignerAccepted!: boolean;
   noCreditCheckIncomeOnly!: boolean;
   evictionAgeToleranceYears!: number | null;
+  applicationFeeCents!: number | null;
   boostedUntil!: Date | null;
   landlordDisplayName!: string;
   units!: UnitResponseDto[];
@@ -156,6 +157,7 @@ export class PropertyResponseDto {
       cosignerAccepted: boolean;
       noCreditCheckIncomeOnly: boolean;
       evictionAgeToleranceYears: number | null;
+      applicationFeeCents: number | null;
       boostedUntil: Date | null;
       boostCheckoutUrl: string | null;
       viewCount: number;
@@ -216,6 +218,7 @@ export class PropertyResponseDto {
     dto.cosignerAccepted = property.cosignerAccepted;
     dto.noCreditCheckIncomeOnly = property.noCreditCheckIncomeOnly;
     dto.evictionAgeToleranceYears = property.evictionAgeToleranceYears;
+    dto.applicationFeeCents = property.applicationFeeCents;
     dto.boostedUntil = property.boostedUntil;
     dto.landlordDisplayName = property.owner?.profile?.displayName ?? 'Property Management';
     dto.units = (property.units ?? []).map((u) => UnitResponseDto.from(u));
