@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { api, TenantPacketSummary } from '../../lib/api';
 import { useAuth } from '../../lib/auth-context';
 import { theme } from '../../lib/theme';
@@ -204,6 +205,14 @@ export default function TenantPacketPage() {
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 style={{ display: 'block', marginTop: 6, fontSize: 13 }}
               />
+              <span style={{ display: 'block', marginTop: 4, fontWeight: 400, color: theme.textMuted }}>
+                Pay stubs, bank statements, etc. — not your Housing Choice Voucher paperwork. Have a Section 8
+                voucher?{' '}
+                <Link href="/housing-voucher" style={{ color: theme.primary, fontWeight: 600 }}>
+                  Upload it here
+                </Link>
+                .
+              </span>
             </label>
             <button
               type="submit"
