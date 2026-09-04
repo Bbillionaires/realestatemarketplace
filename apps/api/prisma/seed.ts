@@ -3,6 +3,7 @@ import { PrismaClient, Role, ConsentStatus } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { createHmac, createCipheriv, randomBytes } from 'crypto';
 import { PAYMENT_STANDARDS, PAYMENT_STANDARDS_EFFECTIVE_DATE } from './payment-standards.data';
+import { NATIONWIDE_FMR_BASELINE, NATIONWIDE_FMR_BASELINE_EFFECTIVE_DATE } from './nationwide-fmr-baseline.data';
 
 const prisma = new PrismaClient();
 
@@ -185,6 +186,23 @@ async function main() {
       });
     }
   }
+
+  // ~33k rows — createMany (skipping ones already loaded by the migration or
+  // a prior seed run) instead of per-row upsert, which would take minutes.
+  const nationwideEffectiveDate = new Date(NATIONWIDE_FMR_BASELINE_EFFECTIVE_DATE);
+  await prisma.nationwideFmrBaseline.createMany({
+    data: NATIONWIDE_FMR_BASELINE.map(({ zip, areaName, rents }) => ({
+      zip,
+      areaName,
+      rent0Cents: rents[0] * 100,
+      rent1Cents: rents[1] * 100,
+      rent2Cents: rents[2] * 100,
+      rent3Cents: rents[3] * 100,
+      rent4Cents: rents[4] * 100,
+      effectiveDate: nationwideEffectiveDate,
+    })),
+    skipDuplicates: true,
+  });
 
   console.log('Seed complete:', {
     superAdmin: superAdmin.email,

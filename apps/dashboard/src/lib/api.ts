@@ -385,6 +385,8 @@ export interface VoucherMatch {
   metroArea: string | null;
   effectiveDate: string | null;
   covered: boolean;
+  /** False when this figure is the nationwide HUD FMR baseline fallback rather than a locally-confirmed payment standard. */
+  isPreciseLocalStandard: boolean;
   matches: PropertySummary[];
 }
 

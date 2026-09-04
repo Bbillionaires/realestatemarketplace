@@ -42,7 +42,19 @@ export interface VoucherMatcherResult {
   effectiveDate: Date | null;
   /** False when this zip/bedroom combo has no published payment standard yet — distinct from "covered, but $0 matches". */
   covered: boolean;
+  /**
+   * True for a locally-confirmed payment standard (e.g. Duval County's
+   * JaxHA data); false when this figure came from the nationwide HUD FMR
+   * baseline fallback instead — a real precision difference worth
+   * surfacing to the tenant, not just an internal implementation detail.
+   */
+  isPreciseLocalStandard: boolean;
   matches: PropertyResponseDto[];
+}
+
+/** HUD's own rule for bedroom sizes beyond its published 4BR ceiling (FY2026 FMR Schedule, Note 1; 24 CFR 888.113): add 15% of the 4BR rent per extra bedroom. */
+function extrapolateBeyondFourBedrooms(rent4Cents: number, bedrooms: number): number {
+  return Math.round(rent4Cents * (1 + 0.15 * (bedrooms - 4)));
 }
 
 export interface PropertySearchFilters {
@@ -556,8 +568,48 @@ export class PropertiesService {
   async matchVoucherProperties(zip: string, bedrooms: number): Promise<VoucherMatcherResult> {
     const standard = await this.prisma.paymentStandard.findUnique({ where: { zip_bedrooms: { zip, bedrooms } } });
 
-    if (!standard) {
-      return { zip, bedrooms, paymentStandardCents: null, metroArea: null, effectiveDate: null, covered: false, matches: [] };
+    let paymentStandardCents: number | null = null;
+    let metroArea: string | null = null;
+    let effectiveDate: Date | null = null;
+    let isPreciseLocalStandard = false;
+
+    if (standard) {
+      paymentStandardCents = standard.monthlyRentCents;
+      metroArea = standard.metroArea;
+      effectiveDate = standard.effectiveDate;
+      isPreciseLocalStandard = true;
+    } else {
+      // No locally-confirmed payment standard for this zip yet — fall back
+      // to the nationwide HUD FMR baseline (county/metro-level, not a real
+      // local payment standard) rather than reporting "not covered".
+      const baseline = await this.prisma.nationwideFmrBaseline.findUnique({ where: { zip } });
+      if (baseline) {
+        const rentsByBedroom = [
+          baseline.rent0Cents,
+          baseline.rent1Cents,
+          baseline.rent2Cents,
+          baseline.rent3Cents,
+          baseline.rent4Cents,
+        ];
+        paymentStandardCents =
+          bedrooms <= 4 ? rentsByBedroom[bedrooms] : extrapolateBeyondFourBedrooms(baseline.rent4Cents, bedrooms);
+        metroArea = baseline.areaName;
+        effectiveDate = baseline.effectiveDate;
+        isPreciseLocalStandard = false;
+      }
+    }
+
+    if (paymentStandardCents === null) {
+      return {
+        zip,
+        bedrooms,
+        paymentStandardCents: null,
+        metroArea: null,
+        effectiveDate: null,
+        covered: false,
+        isPreciseLocalStandard: false,
+        matches: [],
+      };
     }
 
     const candidates = await this.prisma.property.findMany({
@@ -570,16 +622,17 @@ export class PropertiesService {
       .map((p) => PropertyResponseDto.from(p, { includeManagement: false }))
       .filter((p) => {
         const rentCents = p.units[0]?.rentCents ?? p.monthlyRentCents;
-        return rentCents !== null && rentCents <= standard.monthlyRentCents;
+        return rentCents !== null && rentCents <= paymentStandardCents!;
       });
 
     return {
       zip,
       bedrooms,
-      paymentStandardCents: standard.monthlyRentCents,
-      metroArea: standard.metroArea,
-      effectiveDate: standard.effectiveDate,
+      paymentStandardCents,
+      metroArea,
+      effectiveDate,
       covered: true,
+      isPreciseLocalStandard,
       matches,
     };
   }

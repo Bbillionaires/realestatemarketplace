@@ -130,8 +130,8 @@ export default function VoucherMatcherPage() {
             }}
           >
             <p style={{ color: theme.textMuted, fontSize: 14, margin: 0 }}>
-              We don&apos;t have a published HUD payment standard for zip code {result.zip} yet. Try a nearby Duval
-              County zip code, or message a Jacksonville Housing Authority caseworker to confirm your standard.
+              We don&apos;t have a published HUD payment standard or baseline estimate for zip code {result.zip} yet.
+              Double-check the zip code, or contact your local housing authority to confirm your standard.
             </p>
           </div>
         )}
@@ -150,13 +150,29 @@ export default function VoucherMatcherPage() {
               }}
             >
               <div style={{ fontSize: 12, color: theme.textMuted, fontWeight: 700, letterSpacing: '0.03em' }}>
-                {BEDROOM_OPTIONS.find((o) => o.value === result.bedrooms)?.label.toUpperCase()} PAYMENT STANDARD
-                &middot; ZIP {result.zip}
+                {BEDROOM_OPTIONS.find((o) => o.value === result.bedrooms)?.label.toUpperCase()}{' '}
+                {result.isPreciseLocalStandard ? 'PAYMENT STANDARD' : 'ESTIMATED BASELINE'} &middot; ZIP {result.zip}
               </div>
               <div style={{ fontSize: 32, fontWeight: 800, color: theme.text, marginTop: 6 }}>
                 {formatMoney(result.paymentStandardCents)}
                 <span style={{ fontSize: 14, fontWeight: 500, color: theme.textMuted }}> /mo</span>
               </div>
+              {!result.isPreciseLocalStandard && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    background: theme.bg,
+                    border: `1px solid ${theme.border}`,
+                    fontSize: 12,
+                    color: theme.textMuted,
+                  }}
+                >
+                  This is a nationwide HUD baseline estimate, not a locally-confirmed payment standard — your
+                  housing authority&apos;s actual figure may differ.
+                </div>
+              )}
               <p style={{ color: theme.textMuted, fontSize: 13, marginTop: 10, marginBottom: 0 }}>
                 {result.metroArea}
                 {result.effectiveDate &&

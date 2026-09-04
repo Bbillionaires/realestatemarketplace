@@ -677,6 +677,28 @@ model PaymentStandard {
   @@index([zip])
 }
 
+// Nationwide HUD FY2026 Fair Market Rent baseline, one row per zip, used only
+// as a fallback when no precise PaymentStandard row exists for that zip. This
+// is county/metro-level HUD data (not a locally-confirmed payment standard
+// like PaymentStandard's Duval County rows) — see
+// prisma/nationwide-fmr-baseline.data.ts for the full source citation and the
+// caveats that come with treating it as a stand-in for a real local standard.
+// 0BR-4BR only; 5BR/6BR are computed at query time (HUD's own +15%-per-extra-
+// bedroom rule), not stored here.
+model NationwideFmrBaseline {
+  id            String   @id @default(uuid())
+  zip           String   @unique
+  areaName      String
+  rent0Cents    Int
+  rent1Cents    Int
+  rent2Cents    Int
+  rent3Cents    Int
+  rent4Cents    Int
+  effectiveDate DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 // Cached result of a SchoolsProvider.findNearby() lookup for a property's
 // geocoded coordinates. Cached (rather than fetched live on every listing
 // view) since the upstream schools API is metered per call and school
