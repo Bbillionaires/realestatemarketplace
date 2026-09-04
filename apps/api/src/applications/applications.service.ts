@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Application, ApplicationStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -56,6 +56,8 @@ export interface IncomeProofFile {
 
 @Injectable()
 export class ApplicationsService {
+  private readonly logger = new Logger(ApplicationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService<AppConfig>,
@@ -262,11 +264,19 @@ export class ApplicationsService {
     });
 
     if (conversation.landlord.email) {
-      await this.emailProvider.sendEmail({
-        to: conversation.landlord.email,
-        subject: `New rental application — ${conversation.property.title}`,
-        text: `A tenant has submitted a rental application for ${conversation.property.title}. View it in your conversation thread.`,
-      });
+      // The application is already recorded as SUBMITTED above — the landlord
+      // can always see it from their dashboard/conversation thread regardless
+      // of whether this notification goes out, so a flaky email provider must
+      // not turn an already-successful submission into a 500 for the tenant.
+      try {
+        await this.emailProvider.sendEmail({
+          to: conversation.landlord.email,
+          subject: `New rental application — ${conversation.property.title}`,
+          text: `A tenant has submitted a rental application for ${conversation.property.title}. View it in your conversation thread.`,
+        });
+      } catch (error) {
+        this.logger.warn(`Failed to notify landlord of application ${application.id} submission: ${error}`);
+      }
     }
     return ApplicationResponseDto.from(updated);
   }

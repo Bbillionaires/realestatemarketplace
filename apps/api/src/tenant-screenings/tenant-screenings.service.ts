@@ -144,7 +144,20 @@ export class TenantScreeningsService {
       orderBy: { createdAt: 'desc' },
     });
     if (existing) {
-      return TenantScreeningResponseDto.from(existing);
+      // Someone (the tenant themselves, or an earlier requester) already has an
+      // unpaid portable screening open — reuse it rather than creating a second
+      // one, but this landlord's ask must still reach the tenant. If nobody has
+      // claimed the initiator slot yet, this landlord claims it (so they get
+      // automatic access once it's complete); if it's already claimed by a
+      // different requester, leave that intact and just notify.
+      const claimed = existing.initiatedById
+        ? existing
+        : await this.prisma.tenantScreening.update({
+            where: { id: existing.id },
+            data: { initiatedById: actor.id, initiatorAcknowledgedAt: new Date() },
+          });
+      await this.notifyTenantOfRequest(tenant.email, actor.email);
+      return TenantScreeningResponseDto.from(claimed);
     }
 
     const feeCents = this.configService.get('tenantScreeningFeeCents', { infer: true }) as number;
