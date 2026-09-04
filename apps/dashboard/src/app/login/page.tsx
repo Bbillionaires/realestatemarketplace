@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth-context';
 import { theme } from '../../lib/theme';
+import { PasswordInput } from '../../components/PasswordInput';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -65,11 +66,11 @@ export default function LoginPage() {
           </label>
           <label style={{ display: 'block', marginBottom: 6, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
             Password
-            <input
-              type="password"
+            <PasswordInput
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
               required
+              autoComplete="current-password"
               style={inputStyle}
             />
           </label>

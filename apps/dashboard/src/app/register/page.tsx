@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { api } from '../../lib/api';
 import { useAuth } from '../../lib/auth-context';
 import { theme } from '../../lib/theme';
+import { PasswordInput } from '../../components/PasswordInput';
 
 const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: 'PROSPECTIVE_TENANT', label: "I'm looking for a place to rent" },
@@ -114,12 +115,12 @@ export default function RegisterPage() {
           </label>
           <label style={{ display: 'block', marginBottom: 14, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
             Password
-            <input
-              type="password"
+            <PasswordInput
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
               required
               minLength={12}
+              autoComplete="new-password"
               style={inputStyle}
             />
             <span style={{ display: 'block', marginTop: 4, fontWeight: 400, color: theme.textMuted }}>

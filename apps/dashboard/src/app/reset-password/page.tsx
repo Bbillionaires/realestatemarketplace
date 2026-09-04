@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '../../lib/api';
 import { theme } from '../../lib/theme';
+import { PasswordInput } from '../../components/PasswordInput';
 
 function ResetPasswordContent() {
   const params = useSearchParams();
@@ -79,12 +80,12 @@ function ResetPasswordContent() {
           <form onSubmit={onSubmit}>
             <label style={{ display: 'block', marginBottom: 14, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
               New password
-              <input
-                type="password"
+              <PasswordInput
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={setNewPassword}
                 required
                 minLength={12}
+                autoComplete="new-password"
                 style={inputStyle}
               />
               <span style={{ display: 'block', marginTop: 4, fontWeight: 400, color: theme.textMuted }}>
@@ -93,12 +94,12 @@ function ResetPasswordContent() {
             </label>
             <label style={{ display: 'block', marginBottom: 18, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
               Confirm new password
-              <input
-                type="password"
+              <PasswordInput
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={setConfirmPassword}
                 required
                 minLength={12}
+                autoComplete="new-password"
                 style={inputStyle}
               />
             </label>
