@@ -1,21 +1,72 @@
+import { getTokens, setTokens } from './token-store';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
 export interface ApiError {
   error: { code: number; message: string | string[]; path: string; timestamp: string };
 }
 
+/**
+ * The access token is short-lived (15m) — without this, any page left open
+ * past that window starts throwing a raw "Unauthorized" at the user instead
+ * of quietly staying signed in. A single in-flight promise is shared across
+ * every caller: the backend rotates refresh tokens on use and treats a
+ * reused one as theft (revoking the whole session), so if several requests
+ * hit a 401 around the same moment, only the first may actually call
+ * /auth/refresh — the rest must await that same attempt rather than each
+ * spending the one valid refresh token themselves.
+ */
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+  const stored = getTokens();
+  if (!stored?.refreshToken) return null;
+
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: stored.refreshToken }),
+      });
+      if (!res.ok) {
+        setTokens(null);
+        return null;
+      }
+      const body = await res.json();
+      setTokens({ accessToken: body.accessToken, refreshToken: body.refreshToken });
+      return body.accessToken as string;
+    } catch {
+      // Network failure mid-refresh — leave stored tokens alone (they may
+      // still be valid; a real 401 will trigger this again) rather than
+      // signing the user out over a transient connectivity blip.
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
 async function request<T>(path: string, options: RequestInit = {}, accessToken?: string): Promise<T> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
+  const doFetch = (token?: string) => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>),
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return fetch(`${API_BASE_URL}/api${path}`, { ...options, headers });
   };
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`;
+
+  let res = await doFetch(accessToken);
+  if (res.status === 401 && accessToken) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) res = await doFetch(refreshed);
   }
 
-  const res = await fetch(`${API_BASE_URL}/api${path}`, { ...options, headers });
   const body = await res.json().catch(() => undefined);
-
   if (!res.ok) {
     const message = body?.error?.message ?? res.statusText;
     throw new Error(Array.isArray(message) ? message.join(', ') : message);
@@ -32,14 +83,19 @@ async function requestMultipart<T>(
   accessToken?: string,
   method: 'POST' | 'PATCH' = 'POST',
 ): Promise<T> {
-  const headers: Record<string, string> = {};
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`;
+  const doFetch = (token?: string) => {
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return fetch(`${API_BASE_URL}/api${path}`, { method, body: formData, headers });
+  };
+
+  let res = await doFetch(accessToken);
+  if (res.status === 401 && accessToken) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) res = await doFetch(refreshed);
   }
 
-  const res = await fetch(`${API_BASE_URL}/api${path}`, { method, body: formData, headers });
   const body = await res.json().catch(() => undefined);
-
   if (!res.ok) {
     const message = body?.error?.message ?? res.statusText;
     throw new Error(Array.isArray(message) ? message.join(', ') : message);
@@ -58,7 +114,14 @@ function parseFileName(disposition: string | null): string {
 }
 
 async function fetchAuthenticatedBlob(path: string, accessToken: string): Promise<{ blob: Blob; fileName: string }> {
-  const res = await fetch(`${API_BASE_URL}/api${path}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const doFetch = (token: string) => fetch(`${API_BASE_URL}/api${path}`, { headers: { Authorization: `Bearer ${token}` } });
+
+  let res = await doFetch(accessToken);
+  if (res.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) res = await doFetch(refreshed);
+  }
+
   if (!res.ok) {
     const body = await res.json().catch(() => undefined);
     const message = body?.error?.message ?? res.statusText;
