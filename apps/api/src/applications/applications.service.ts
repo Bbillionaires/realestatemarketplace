@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Application, ApplicationStatus, Role } from '@prisma/client';
+import { Application, ApplicationStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfig } from '../config/configuration';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
@@ -111,18 +111,34 @@ export class ApplicationsService {
       return ApplicationResponseDto.from(existing);
     }
 
-    const application = await this.prisma.application.create({
-      data: {
-        conversationId,
-        tenantId: actor.id,
-        propertyId: conversation.propertyId,
-        unitId: conversation.unitId,
-        bedId: conversation.bedId,
-        feeCents: conversation.property.applicationFeeCents ?? null,
-      },
-      include: APPLICATION_INCLUDE,
-    });
-    return ApplicationResponseDto.from(application);
+    try {
+      const application = await this.prisma.application.create({
+        data: {
+          conversationId,
+          tenantId: actor.id,
+          propertyId: conversation.propertyId,
+          unitId: conversation.unitId,
+          bedId: conversation.bedId,
+          feeCents: conversation.property.applicationFeeCents ?? null,
+        },
+        include: APPLICATION_INCLUDE,
+      });
+      return ApplicationResponseDto.from(application);
+    } catch (error) {
+      // Two near-simultaneous create-or-get calls (a double-click, two open
+      // tabs, a retried request) can both pass the findUnique check above
+      // before either has inserted — the loser hits conversationId's unique
+      // constraint. That's not a real failure, just a race on who created
+      // the row first, so fetch and return what the winner created instead
+      // of surfacing a 500.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const created = await this.prisma.application.findUnique({ where: { conversationId }, include: APPLICATION_INCLUDE });
+        if (created) {
+          return ApplicationResponseDto.from(created);
+        }
+      }
+      throw error;
+    }
   }
 
   async get(actor: AuthenticatedUser, conversationId: string): Promise<ApplicationResponseDto> {
