@@ -1,7 +1,9 @@
 import { randomBytes, createHash } from 'crypto';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -14,9 +16,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AppConfig } from '../config/configuration';
 import { AuditService } from '../audit/audit.service';
 import { parseDurationToMs } from '../common/utils/duration.util';
+import { EMAIL_PROVIDER } from '../email/email.constants';
+import { EmailProvider } from '../email/interfaces/email-provider.interface';
 import { RegisterDto } from './dto/register.dto';
 import { TokenPair } from './interfaces/token-pair.interface';
 import { AuthenticatedUser } from '../common/interfaces/authenticated-user.interface';
+
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 
 export interface RequestContext {
   ipAddress?: string;
@@ -32,6 +38,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService<AppConfig>,
     private readonly auditService: AuditService,
+    @Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider,
   ) {
     this.jwtConfig = this.configService.get('jwt', { infer: true }) as AppConfig['jwt'];
   }
@@ -171,6 +178,80 @@ export class AuthService {
     await this.prisma.refreshToken.updateMany({
       where: { tokenHash, revokedAt: null },
       data: { revokedAt: new Date() },
+    });
+  }
+
+  /**
+   * Always resolves the same way whether or not the email matches an
+   * account — the caller (and the controller response) must not be able to
+   * distinguish the two cases, or this becomes an account-enumeration
+   * oracle. Any real work (token creation, email send) only happens for a
+   * genuine, active account.
+   */
+  async requestPasswordReset(email: string, ctx: RequestContext): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (!user || !user.isActive) {
+      return;
+    }
+
+    // Superseded by this new request — an old email's link shouldn't stay live.
+    await this.prisma.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } });
+
+    const rawToken = randomBytes(32).toString('hex');
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: this.hashToken(rawToken),
+        expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+      },
+    });
+
+    const dashboardBaseUrl = this.configService.get('dashboardBaseUrl', { infer: true });
+    await this.emailProvider.sendEmail({
+      to: user.email,
+      subject: 'Reset your Affordable Home Match password',
+      text: `We received a request to reset your password. This link is valid for 1 hour: ${dashboardBaseUrl}/reset-password?token=${rawToken}\n\nIf you didn't request this, you can ignore this email — your password won't change.`,
+    });
+
+    await this.auditService.log({
+      actorId: user.id,
+      action: 'auth.password_reset_requested',
+      entityType: 'User',
+      entityId: user.id,
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+    });
+  }
+
+  async resetPassword(rawToken: string, newPassword: string, ctx: RequestContext): Promise<void> {
+    const tokenHash = this.hashToken(rawToken);
+    const record = await this.prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+
+    if (!record || record.usedAt || record.expiresAt < new Date()) {
+      throw new BadRequestException('This reset link is invalid or has expired');
+    }
+
+    const passwordHash = await argon2.hash(newPassword, { type: argon2.argon2id });
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
+      this.prisma.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
+      // A password reset is a strong signal the account may have been
+      // compromised (or the tenant just forgot it on a shared device) —
+      // either way, every other session should have to re-authenticate.
+      this.prisma.refreshToken.updateMany({
+        where: { userId: record.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    await this.auditService.log({
+      actorId: record.userId,
+      action: 'auth.password_reset_completed',
+      entityType: 'User',
+      entityId: record.userId,
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
     });
   }
 

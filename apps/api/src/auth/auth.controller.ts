@@ -6,6 +6,8 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 function requestContext(req: Request) {
   return { ipAddress: req.ip, userAgent: req.headers['user-agent'] };
@@ -48,5 +50,23 @@ export class AuthController {
   @Post('logout')
   async logout(@Body() dto: RefreshTokenDto) {
     await this.authService.logout(dto.refreshToken);
+  }
+
+  // Always responds the same way regardless of whether the email matches an
+  // account, so a caller can't use this to probe which emails are registered.
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
+    await this.authService.requestPasswordReset(dto.email, requestContext(req));
+    return { message: "If an account exists for that email, we've sent a password reset link." };
+  }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
+    await this.authService.resetPassword(dto.token, dto.newPassword, requestContext(req));
+    return { message: 'Your password has been reset. You can now sign in.' };
   }
 }

@@ -63,7 +63,7 @@ export default function LoginPage() {
             Email
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={inputStyle} />
           </label>
-          <label style={{ display: 'block', marginBottom: 18, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
+          <label style={{ display: 'block', marginBottom: 6, fontSize: 13, color: theme.textMuted, fontWeight: 600 }}>
             Password
             <input
               type="password"
@@ -73,6 +73,11 @@ export default function LoginPage() {
               style={inputStyle}
             />
           </label>
+          <p style={{ marginTop: 0, marginBottom: 18, textAlign: 'right' }}>
+            <Link href="/forgot-password" style={{ color: theme.primary, fontSize: 13, textDecoration: 'none' }}>
+              Forgot password?
+            </Link>
+          </p>
           {error && (
             <p style={{ color: theme.danger, fontSize: 13, background: '#fdecec', padding: '8px 10px', borderRadius: 6 }}>
               {error}

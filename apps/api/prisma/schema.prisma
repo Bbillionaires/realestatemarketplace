@@ -333,6 +333,7 @@ model User {
   profile               UserProfile?
   phoneNumbers          PhoneNumber[]
   refreshTokens         RefreshToken[]
+  passwordResetTokens   PasswordResetToken[]
   ownedProperties       Property[]                   @relation("PropertyOwner")
   managerAssignments    PropertyManagerAssignment[]
   conversationsAsTenant   Conversation[]              @relation("ConversationTenant")
@@ -385,6 +386,22 @@ model RefreshToken {
 
   @@index([userId])
   @@index([familyId])
+}
+
+// A single-use, short-lived token emailed to a user who requested a
+// password reset. Only the SHA-256 hash is ever persisted, matching
+// RefreshToken's convention — the raw token exists only in the emailed
+// link and the requester's memory, never at rest.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model UserProfile {
