@@ -14,6 +14,17 @@ export function parseAllowedOrigins(raw: string | undefined, fallback: string): 
 }
 
 /**
+ * DASHBOARD_BASE_URL's comma-separated form exists for the CORS allowlist
+ * above — it is never itself a valid single URL to build a link against.
+ * Anything that constructs a link a person will click (an emailed link, a
+ * post-checkout redirect) needs exactly one base origin, so it takes the
+ * first entry as the canonical one rather than the raw env var.
+ */
+export function primaryOrigin(raw: string | undefined, fallback: string): string {
+  return parseAllowedOrigins(raw, fallback)[0] ?? fallback;
+}
+
+/**
  * CORS `origin` callback: allows any origin in the list, rejects everything
  * else. Rejection is signaled as `callback(null, false)` — the `cors`
  * package's own convention for "just omit the CORS headers" — never

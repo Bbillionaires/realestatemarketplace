@@ -1,3 +1,5 @@
+import { primaryOrigin } from '../common/utils/cors-origins.util';
+
 export interface AppConfig {
   nodeEnv: string;
   port: number;
@@ -112,7 +114,10 @@ export default (): AppConfig => ({
     messagingProfileId: process.env.TELNYX_MESSAGING_PROFILE_ID ?? '',
   },
   appBaseUrl: process.env.APP_BASE_URL ?? 'http://localhost:3001',
-  dashboardBaseUrl: process.env.DASHBOARD_BASE_URL ?? 'http://localhost:3000',
+  // DASHBOARD_BASE_URL may be a comma-separated list of allowed CORS
+  // origins (see cors-origins.util.ts) — this is the one canonical origin
+  // for building a link a person will actually click.
+  dashboardBaseUrl: primaryOrigin(process.env.DASHBOARD_BASE_URL, 'http://localhost:3000'),
   rateLimits: {
     globalPerMin: parseInt(process.env.GLOBAL_RATE_LIMIT_PER_MIN ?? '300', 10),
     authPerMin: parseInt(process.env.AUTH_RATE_LIMIT_PER_MIN ?? '10', 10),

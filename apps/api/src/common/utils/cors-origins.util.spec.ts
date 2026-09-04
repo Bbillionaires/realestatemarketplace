@@ -1,4 +1,4 @@
-import { corsOriginValidator, parseAllowedOrigins } from './cors-origins.util';
+import { corsOriginValidator, parseAllowedOrigins, primaryOrigin } from './cors-origins.util';
 
 describe('parseAllowedOrigins', () => {
   it('falls back to the default when unset', () => {
@@ -17,6 +17,23 @@ describe('parseAllowedOrigins', () => {
       'https://a.example.com',
       'https://b.example.com',
     ]);
+  });
+});
+
+describe('primaryOrigin', () => {
+  it('falls back to the default when unset', () => {
+    expect(primaryOrigin(undefined, 'http://localhost:3000')).toBe('http://localhost:3000');
+  });
+
+  it('takes the first entry of a comma-separated CORS allowlist, not the whole string', () => {
+    // This is the exact shape DASHBOARD_BASE_URL takes in production — a
+    // link built from the raw multi-origin string is broken, e.g.
+    // "https://a.example.com,https://b.example.com/reset-password?token=..."
+    expect(primaryOrigin('https://a.example.com,https://b.example.com', 'fallback')).toBe('https://a.example.com');
+  });
+
+  it('trims whitespace around the first entry', () => {
+    expect(primaryOrigin(' https://a.example.com , https://b.example.com', 'fallback')).toBe('https://a.example.com');
   });
 });
 
