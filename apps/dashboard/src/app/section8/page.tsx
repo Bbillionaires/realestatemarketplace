@@ -98,6 +98,20 @@ export default function Section8Page() {
             >
               Check My Zip Code Payment Standard
             </Link>
+            <Link
+              href="/tenant-packet"
+              style={{
+                padding: '10px 18px',
+                borderRadius: 8,
+                border: `1px solid ${theme.primary}`,
+                color: theme.primary,
+                fontWeight: 700,
+                fontSize: 14,
+                textDecoration: 'none',
+              }}
+            >
+              Build My Tenant Profile
+            </Link>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 16, fontSize: 13 }}>
             <Link href="/hqs-checklist" style={{ color: theme.primary, fontWeight: 600 }}>
